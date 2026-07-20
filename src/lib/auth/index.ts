@@ -1,19 +1,28 @@
-/**
- * Auth stub — Moai's Catalog v1 has no user authentication.
- *
- * Future (gastly-app pattern):
- * 1. Enable Firebase Auth in raziel-app-hub
- * 2. Mirror gastly-app session provider / route guards
- * 3. Replace MOAIS_ADMIN_SECRET with ID token verification in API routes
- * 4. Use moaisCatalog_admins/{uid} (or custom claims) for staff access
- *
- * Clone reference when available:
- *   git clone <Israel2709/gastly-app> ../_refs/gastly-app
- */
+export const SESSION_COOKIE = "moais_session";
 
-export const AUTH_STATUS = "disabled" as const;
+/** Session cookie lifetime (Firebase max is 14 days). */
+export const SESSION_MAX_AGE_MS = 60 * 60 * 24 * 5 * 1000;
 
-export type FutureAuthUser = {
+export type AuthUser = {
   uid: string;
-  email: string | null;
+  email: string;
 };
+
+export function getSuperAdminEmails(): string[] {
+  const raw = process.env.MOAIS_SUPER_ADMIN_EMAILS ?? "";
+  return raw
+    .split(",")
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+export function isSuperAdminEmail(email: string | null | undefined): boolean {
+  if (!email) {
+    return false;
+  }
+  const allowed = getSuperAdminEmails();
+  if (allowed.length === 0) {
+    return false;
+  }
+  return allowed.includes(email.trim().toLowerCase());
+}

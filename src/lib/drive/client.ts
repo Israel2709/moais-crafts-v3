@@ -7,9 +7,9 @@ const FOLDER_MIME = "application/vnd.google-apps.folder";
 const TOKEN_FILE = path.join(process.cwd(), ".data", "drive-token.json");
 
 export function getOAuth2Client() {
-  const clientId = process.env.GOOGLE_CLIENT_ID;
-  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-  const redirectUri = process.env.GOOGLE_REDIRECT_URI;
+  const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim();
+  const redirectUri = process.env.GOOGLE_REDIRECT_URI?.trim();
 
   if (!clientId || !clientSecret || !redirectUri) {
     throw new Error("GOOGLE_CLIENT_ID/SECRET/REDIRECT_URI are required");
@@ -18,22 +18,37 @@ export function getOAuth2Client() {
   return new google.auth.OAuth2(clientId, clientSecret, redirectUri);
 }
 
-export function getDriveAuthUrl(): string {
+export function getDriveAuthUrl(returnPath = "/laser"): string {
   const client = getOAuth2Client();
   return client.generateAuthUrl({
     access_type: "offline",
     prompt: "consent",
     scope: ["https://www.googleapis.com/auth/drive.readonly"],
+    state: returnPath.startsWith("/") ? returnPath : "/laser",
   });
 }
 
 export async function exchangeCodeForTokens(code: string) {
   const client = getOAuth2Client();
-  const { tokens } = await client.getToken(code);
-  if (tokens.refresh_token) {
-    await saveRefreshToken(tokens.refresh_token);
+  try {
+    const { tokens } = await client.getToken(code);
+    if (tokens.refresh_token) {
+      await saveRefreshToken(tokens.refresh_token);
+    } else {
+      throw new Error(
+        "Google no devolvió refresh_token. Revoca el acceso de la app en tu cuenta Google y vuelve a conectar.",
+      );
+    }
+    return tokens;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes("invalid_client")) {
+      throw new Error(
+        "invalid_client: revisa GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET (deben ser del mismo cliente OAuth) y reinicia el server.",
+      );
+    }
+    throw error;
   }
-  return tokens;
 }
 
 async function saveRefreshToken(refreshToken: string) {
@@ -62,7 +77,7 @@ export async function getAuthenticatedDrive() {
   const refreshToken = await loadRefreshToken();
   if (!refreshToken) {
     throw new Error(
-      "Drive not connected. Visit /api/drive/auth after setting Google OAuth env vars.",
+      "Drive no conectado. Haz clic en «Conectar Google Drive» y autoriza con tu cuenta de Google.",
     );
   }
 

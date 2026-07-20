@@ -3,7 +3,7 @@ import {
   AdminAuthError,
   adminErrorResponse,
   assertAdminRequest,
-} from "@/lib/admin-secret";
+} from "@/lib/auth/session";
 import { createDesignFromDrive } from "@/lib/designs/service";
 
 export async function POST(request: NextRequest) {

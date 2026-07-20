@@ -1,10 +1,5 @@
-import { ExploreDesktop, ExploreMobile } from "@/components/explore/ExploreViews";
+import { redirect } from "next/navigation";
 
 export default function ExplorePage() {
-  return (
-    <>
-      <ExploreMobile />
-      <ExploreDesktop />
-    </>
-  );
+  redirect("/laser");
 }

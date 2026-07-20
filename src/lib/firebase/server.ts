@@ -1,18 +1,33 @@
+import { readFileSync, existsSync } from "fs";
+import path from "path";
 import { initializeApp, getApps, cert, type App } from "firebase-admin/app";
+import { getAuth, type Auth } from "firebase-admin/auth";
 import { getFirestore, type Firestore } from "firebase-admin/firestore";
 import { getStorage, type Storage } from "firebase-admin/storage";
 
-function parseServiceAccount() {
-  const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-  if (!raw) {
+type ServiceAccount = {
+  project_id: string;
+  client_email: string;
+  private_key: string;
+};
+
+function loadServiceAccount(): ServiceAccount | null {
+  const filePath =
+    process.env.FIREBASE_SERVICE_ACCOUNT_PATH ||
+    path.join(process.cwd(), ".data", "firebase-service-account.json");
+
+  if (existsSync(filePath)) {
+    const raw = readFileSync(filePath, "utf8");
+    return JSON.parse(raw) as ServiceAccount;
+  }
+
+  const rawJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  if (!rawJson) {
     return null;
   }
+
   try {
-    return JSON.parse(raw) as {
-      project_id: string;
-      client_email: string;
-      private_key: string;
-    };
+    return JSON.parse(rawJson) as ServiceAccount;
   } catch {
     throw new Error("FIREBASE_SERVICE_ACCOUNT_JSON is not valid JSON");
   }
@@ -31,10 +46,10 @@ export function getAdminApp(): App {
     return adminApp;
   }
 
-  const serviceAccount = parseServiceAccount();
+  const serviceAccount = loadServiceAccount();
   if (!serviceAccount) {
     throw new Error(
-      "FIREBASE_SERVICE_ACCOUNT_JSON is required for Admin SDK operations",
+      "Firebase Admin credentials missing. Set FIREBASE_SERVICE_ACCOUNT_PATH or place the JSON at .data/firebase-service-account.json",
     );
   }
 
@@ -48,6 +63,10 @@ export function getAdminApp(): App {
   });
 
   return adminApp;
+}
+
+export function getAdminAuth(): Auth {
+  return getAuth(getAdminApp());
 }
 
 export function getAdminDb(): Firestore {

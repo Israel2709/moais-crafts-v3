@@ -11,9 +11,8 @@ const DEFAULT_TAXONOMIES: Taxonomies = {
   franchises: ["sin-franquicia"],
 };
 
-function useExploreState() {
-  const rootId = process.env.NEXT_PUBLIC_DRIVE_ROOT_FOLDER_ID || "root";
-  const [crumbs, setCrumbs] = useState<Crumb[]>([{ id: rootId, name: "Drive" }]);
+function useExploreState(root: { id: string; name: string } | null) {
+  const [crumbs, setCrumbs] = useState<Crumb[]>([]);
   const [items, setItems] = useState<DriveItem[]>([]);
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<"all" | "folder" | "file">("all");
@@ -30,7 +29,24 @@ function useExploreState() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
+  const rootId = root?.id ?? null;
+  const rootName = root?.name ?? "Drive";
   const currentFolderId = crumbs[crumbs.length - 1]?.id ?? rootId;
+
+  useEffect(() => {
+    if (!rootId) {
+      setCrumbs([]);
+      setItems([]);
+      setSelected(null);
+      setQuery("");
+      setError(null);
+      return;
+    }
+    setCrumbs([{ id: rootId, name: rootName }]);
+    setSelected(null);
+    setQuery("");
+    setMessage(null);
+  }, [rootId, rootName]);
 
   const loadFolder = useCallback(async (folderId: string) => {
     setLoading(true);
@@ -49,6 +65,7 @@ function useExploreState() {
   }, []);
 
   useEffect(() => {
+    if (!currentFolderId) return;
     void loadFolder(currentFolderId);
   }, [currentFolderId, loadFolder]);
 
@@ -63,6 +80,7 @@ function useExploreState() {
 
   async function onSearch(event: FormEvent) {
     event.preventDefault();
+    if (!currentFolderId) return;
     if (!query.trim()) {
       void loadFolder(currentFolderId);
       return;
@@ -149,21 +167,27 @@ function useExploreState() {
     jumpTo,
     selectFile,
     addToCatalog,
-    reload: () => loadFolder(currentFolderId),
+    reload: () => {
+      if (currentFolderId) void loadFolder(currentFolderId);
+    },
   };
 }
 
-export function ExploreMobile() {
-  const state = useExploreState();
+export function ExploreMobile({
+  root,
+}: {
+  root: { id: string; name: string };
+}) {
+  const state = useExploreState(root);
 
   return (
     <div className="space-y-4 md:hidden">
-      <form onSubmit={state.onSearch} className="flex gap-2">
+      <form onSubmit={state.onSearch} className="flex min-w-0 gap-2">
         <input
           value={state.query}
           onChange={(e) => state.setQuery(e.target.value)}
           placeholder="Buscar por nombre"
-          className="flex-1 rounded-lg border border-border bg-bg-panel px-3 py-2 text-sm"
+          className="min-w-0 flex-1 rounded-lg border border-border bg-bg-panel px-3 py-2 text-sm"
         />
         <button type="submit" className="rounded-lg bg-brand-blue px-3 py-2 text-sm">
           Buscar
@@ -290,38 +314,35 @@ export function ExploreMobile() {
           ) : null}
         </form>
       ) : null}
-
-      <a
-        href="/api/drive/auth"
-        className="block text-center text-xs text-text-muted underline"
-      >
-        Conectar / reconectar Google Drive
-      </a>
     </div>
   );
 }
 
-export function ExploreDesktop() {
-  const state = useExploreState();
+export function ExploreDesktop({
+  root,
+}: {
+  root: { id: string; name: string };
+}) {
+  const state = useExploreState(root);
 
   return (
-    <div className="hidden md:grid md:grid-cols-[280px_1fr_320px] md:gap-4">
-      <section className="rounded-2xl border border-border bg-bg-panel p-4">
-        <p className="mb-3 text-sm text-brand-cyan">Carpetas</p>
-        <div className="mb-3 flex flex-wrap gap-1 text-xs">
+    <div className="hidden h-full min-h-0 min-w-0 flex-1 md:grid md:grid-cols-1 md:grid-rows-[minmax(0,1fr)] md:gap-4 xl:grid-cols-[minmax(0,240px)_minmax(0,1fr)_minmax(0,300px)]">
+      <section className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-border bg-bg-panel p-4">
+        <p className="mb-3 shrink-0 text-sm text-brand-cyan">Carpetas</p>
+        <div className="mb-3 flex shrink-0 flex-wrap gap-1 text-xs">
           {state.crumbs.map((crumb, index) => (
             <button
               key={`${crumb.id}-${index}`}
               type="button"
               onClick={() => state.jumpTo(index)}
-              className="text-brand-cream hover:text-brand-cyan"
+              className="max-w-full truncate text-brand-cream hover:text-brand-cyan"
             >
               {crumb.name}
               {index < state.crumbs.length - 1 ? " /" : ""}
             </button>
           ))}
         </div>
-        <ul className="max-h-[60vh] space-y-1 overflow-y-auto">
+        <ul className="min-h-0 flex-1 space-y-1 overflow-y-auto">
           {state.visible
             .filter((i) => i.isFolder)
             .map((item) => (
@@ -329,22 +350,26 @@ export function ExploreDesktop() {
                 <button
                   type="button"
                   onClick={() => state.openFolder(item)}
-                  className="w-full rounded-lg px-2 py-2 text-left text-sm hover:bg-bg-elevated"
+                  className="flex w-full min-w-0 items-center gap-2 rounded-lg px-2 py-2 text-left text-sm hover:bg-bg-elevated"
                 >
-                  DIR {item.name}
+                  <span className="shrink-0 text-brand-cyan">DIR</span>
+                  <span className="truncate">{item.name}</span>
                 </button>
               </li>
             ))}
         </ul>
       </section>
 
-      <section className="rounded-2xl border border-border bg-bg-panel p-4">
-        <form onSubmit={state.onSearch} className="mb-4 flex gap-2">
+      <section className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-border bg-bg-panel p-4">
+        <form
+          onSubmit={state.onSearch}
+          className="mb-4 flex shrink-0 min-w-0 flex-wrap gap-2"
+        >
           <input
             value={state.query}
             onChange={(e) => state.setQuery(e.target.value)}
             placeholder="Buscar por nombre"
-            className="flex-1 rounded-lg border border-border bg-bg-elevated px-3 py-2 text-sm"
+            className="min-w-0 flex-1 rounded-lg border border-border bg-bg-elevated px-3 py-2 text-sm"
           />
           <select
             value={state.typeFilter}
@@ -361,34 +386,44 @@ export function ExploreDesktop() {
             Buscar
           </button>
         </form>
-        {state.loading ? <p className="text-sm text-text-muted">Cargando…</p> : null}
-        {state.error ? <p className="text-sm text-brand-red">{state.error}</p> : null}
-        <div className="grid grid-cols-2 gap-3 xl:grid-cols-3">
-          {state.visible
-            .filter((i) => !i.isFolder)
-            .map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => state.selectFile(item)}
-                className={`rounded-xl border p-3 text-left ${
-                  state.selected?.id === item.id
-                    ? "border-brand-cyan bg-bg-elevated"
-                    : "border-border bg-bg-elevated/50 hover:border-brand-orange"
-                }`}
-              >
-                <p className="line-clamp-2 text-sm text-brand-cream">{item.name}</p>
-                <p className="mt-1 truncate text-xs text-text-muted">{item.mimeType}</p>
-              </button>
-            ))}
+        {state.loading ? (
+          <p className="shrink-0 text-sm text-text-muted">Cargando…</p>
+        ) : null}
+        {state.error ? (
+          <p className="shrink-0 text-sm text-brand-red">{state.error}</p>
+        ) : null}
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="grid grid-cols-2 gap-3 xl:grid-cols-3">
+            {state.visible
+              .filter((i) => !i.isFolder)
+              .map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => state.selectFile(item)}
+                  className={`min-w-0 rounded-xl border p-3 text-left ${
+                    state.selected?.id === item.id
+                      ? "border-brand-cyan bg-bg-elevated"
+                      : "border-border bg-bg-elevated/50 hover:border-brand-orange"
+                  }`}
+                >
+                  <p className="line-clamp-2 break-words text-sm text-brand-cream">
+                    {item.name}
+                  </p>
+                  <p className="mt-1 truncate text-xs text-text-muted">
+                    {item.mimeType}
+                  </p>
+                </button>
+              ))}
+          </div>
         </div>
       </section>
 
-      <section className="rounded-2xl border border-border bg-bg-panel p-4">
-        <p className="mb-3 text-sm text-brand-orange">Agregar a mi catálogo</p>
+      <section className="flex min-h-0 min-w-0 flex-col overflow-y-auto rounded-2xl border border-border bg-bg-panel p-4">
+        <p className="mb-3 shrink-0 text-sm text-brand-orange">Agregar a mi catálogo</p>
         {state.selected ? (
           <form onSubmit={state.addToCatalog} className="space-y-3">
-            <p className="text-xs text-text-muted">{state.selected.name}</p>
+            <p className="truncate text-xs text-text-muted">{state.selected.name}</p>
             <input
               className="w-full rounded-lg border border-border bg-bg-elevated px-3 py-2 text-sm"
               value={state.form.title}
@@ -442,7 +477,7 @@ export function ExploreDesktop() {
               {state.saving ? "Subiendo…" : "Agregar"}
             </button>
             {state.message ? (
-              <p className="text-xs text-brand-cyan">{state.message}</p>
+              <p className="break-words text-xs text-brand-cyan">{state.message}</p>
             ) : null}
           </form>
         ) : (
@@ -450,12 +485,6 @@ export function ExploreDesktop() {
             Selecciona un archivo del panel central.
           </p>
         )}
-        <a
-          href="/api/drive/auth"
-          className="mt-6 block text-xs text-text-muted underline"
-        >
-          Conectar Google Drive
-        </a>
       </section>
     </div>
   );

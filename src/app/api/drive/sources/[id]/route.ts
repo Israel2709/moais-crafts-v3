@@ -1,20 +1,20 @@
 import { NextRequest } from "next/server";
-import { searchDriveFiles } from "@/lib/drive/client";
 import {
   AdminAuthError,
   adminErrorResponse,
   assertAdminRequest,
 } from "@/lib/auth/session";
+import { deleteDriveLibrarySource } from "@/lib/drive/sources";
 
-export async function GET(request: NextRequest) {
+export async function DELETE(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> },
+) {
   try {
     await assertAdminRequest(request);
-    const q = request.nextUrl.searchParams.get("q")?.trim() ?? "";
-    if (!q) {
-      return Response.json({ items: [] });
-    }
-    const items = await searchDriveFiles(q);
-    return Response.json({ items });
+    const { id } = await context.params;
+    await deleteDriveLibrarySource(id);
+    return Response.json({ ok: true });
   } catch (error) {
     if (error instanceof AdminAuthError) {
       return adminErrorResponse(error);

@@ -8,7 +8,6 @@ import {
   setAdminSessionCookie,
 } from "@/lib/auth/session";
 
-/** Legacy path — prefer `/api/auth/session`. */
 export async function GET() {
   const user = await readAdminSession();
   return Response.json({

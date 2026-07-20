@@ -3,7 +3,7 @@ import {
   AdminAuthError,
   adminErrorResponse,
   assertAdminRequest,
-} from "@/lib/admin-secret";
+} from "@/lib/auth/session";
 import { ensureTaxonomies } from "@/lib/designs/service";
 
 export async function GET(request: NextRequest) {

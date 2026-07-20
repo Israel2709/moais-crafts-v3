@@ -21,9 +21,10 @@ cp .env.local.example .env.local
 2. Completa `.env.local`:
 
 - Firebase client keys del proyecto `raziel-app-hub`
-- `FIREBASE_SERVICE_ACCOUNT_JSON` (JSON del service account en una línea)
-- `MOAIS_ADMIN_SECRET` (secreto temporal para admin)
-- Google OAuth (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, redirect `http://localhost:3040/api/drive/callback`)
+- `FIREBASE_SERVICE_ACCOUNT_PATH` → `.data/firebase-service-account.json` (gitignored), o `FIREBASE_SERVICE_ACCOUNT_JSON` en una línea
+- `MOAIS_SUPER_ADMIN_EMAILS` (p. ej. `israel.salinas.m@gmail.com`)
+- En Firebase Console: Auth con Google y/o correo-contraseña habilitados
+- Google Drive OAuth (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, redirect `http://localhost:3040/api/drive/callback`) — aparte del login
 - Opcional: `GOOGLE_DRIVE_ROOT_FOLDER_ID`, `GOOGLE_DRIVE_REFRESH_TOKEN`
 
 3. Despliega rules (CLI Firebase):
@@ -41,22 +42,27 @@ npm install
 npm run dev
 ```
 
-5. Abre `http://localhost:3040`, ingresa el admin secret, luego **Conectar Google Drive** desde Explorar (guarda refresh token en `.data/drive-token.json`).
+5. Abre `http://localhost:3040`, inicia sesión con Google o correo (solo emails en `MOAIS_SUPER_ADMIN_EMAILS`), luego **Conectar Google Drive** desde Explorar (guarda refresh token en `.data/drive-token.json`).
 
 ## Rutas
 
 | Ruta | Descripción |
 |------|-------------|
 | `/` | Home admin |
-| `/explore` | Drive (mobile lista / desktop split) |
+| `/laser` | Fuentes Drive + exploración de archivos laser |
+| `/3d` | Fuentes Drive + exploración de archivos 3D |
 | `/catalog` | Catálogo propio + filtros |
 | `/catalog/[id]` | Detalle / editar / publicar |
-| `/p/catalog` | Stub público (`published`) sin secreto |
+| `/p/catalog` | Stub público (`published`) sin login |
+| `/explore` | Redirige a `/laser` |
 
-## Auth (v1 vs futuro)
+## Auth
 
-- **v1:** sin Firebase Auth. Mutaciones y Drive protegidos con cookie `MOAIS_ADMIN_SECRET`.
-- **Futuro:** Auth estilo gastly-app (cuenta GitHub `Israel2709`). Stub en [`src/lib/auth/index.ts`](src/lib/auth/index.ts). Colección `moaisCatalog_admins` reservada.
+- **Admin:** Firebase Auth (Google + correo/contraseña) + session cookie httpOnly.
+- Solo emails listados en `MOAIS_SUPER_ADMIN_EMAILS` pasan el gate y las APIs admin.
+- **Público:** `/p/catalog` sin autenticación.
+- **Drive OAuth** es independiente del login (credenciales `GOOGLE_CLIENT_*`).
+- Colección `moaisCatalog_admins` reservada para allowlist en Firestore más adelante.
 
 ## GitHub
 

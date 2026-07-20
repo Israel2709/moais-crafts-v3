@@ -3,7 +3,7 @@ import {
   AdminAuthError,
   adminErrorResponse,
   assertAdminRequest,
-} from "@/lib/admin-secret";
+} from "@/lib/auth/session";
 import { getDesignById, updateDesign } from "@/lib/designs/service";
 import type { DesignStatus } from "@/lib/types/design";
 

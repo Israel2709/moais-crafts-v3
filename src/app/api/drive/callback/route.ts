@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { exchangeCodeForTokens } from "@/lib/drive/client";
-import { adminErrorResponse } from "@/lib/admin-secret";
+import { adminErrorResponse } from "@/lib/auth/session";
 
 /** OAuth callback must be reachable without admin header (Google redirect). */
 export async function GET(request: NextRequest) {
@@ -11,7 +11,12 @@ export async function GET(request: NextRequest) {
     }
     const tokens = await exchangeCodeForTokens(code);
     void tokens;
-    return Response.redirect(new URL("/explore?drive=connected", request.url));
+    const next = request.nextUrl.searchParams.get("state") || "/3d";
+    const safeNext =
+      next.startsWith("/") && !next.startsWith("//") ? next : "/3d";
+    return Response.redirect(
+      new URL(`${safeNext}?drive=connected`, request.url),
+    );
   } catch (error) {
     return adminErrorResponse(error);
   }

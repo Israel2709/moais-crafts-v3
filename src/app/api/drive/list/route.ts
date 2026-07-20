@@ -4,7 +4,7 @@ import {
   AdminAuthError,
   adminErrorResponse,
   assertAdminRequest,
-} from "@/lib/admin-secret";
+} from "@/lib/auth/session";
 
 export async function GET(request: NextRequest) {
   try {

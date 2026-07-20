@@ -3,6 +3,7 @@ export const COLLECTIONS = {
   designs: "moaisCatalog_designs",
   taxonomies: "moaisCatalog_taxonomies",
   admins: "moaisCatalog_admins",
+  driveSources: "moaisCatalog_driveSources",
 } as const;
 
 export const STORAGE_PREFIX = "moais-catalog";

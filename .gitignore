@@ -23,6 +23,8 @@
 *.pem
 .data/
 .drive-token.json
+*firebase-adminsdk*.json
+**/service-account*.json
 
 # debug
 npm-debug.log*

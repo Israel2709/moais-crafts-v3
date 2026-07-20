@@ -20,5 +20,9 @@ service cloud.firestore {
     match /moaisCatalog_admins/{uid} {
       allow read, write: if false;
     }
+
+    match /moaisCatalog_driveSources/{sourceId} {
+      allow read, write: if false;
+    }
   }
 }

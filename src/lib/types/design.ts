@@ -1,5 +1,18 @@
 export type DesignStatus = "draft" | "published";
 
+/** Catalog content kind — laser cut vs 3D (STL, etc.). */
+export type DesignKind = "laser" | "3d";
+
+/** A configured Drive folder root for a given kind (multiple allowed). */
+export type DriveLibrarySource = {
+  id: string;
+  kind: DesignKind;
+  name: string;
+  folderId: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type DriveSource = {
   driveFileId: string;
   drivePath: string;

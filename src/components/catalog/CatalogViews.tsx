@@ -135,15 +135,15 @@ export function CatalogDesktop() {
   const state = useCatalogData();
 
   return (
-    <div className="hidden md:grid md:grid-cols-[260px_1fr] md:gap-6">
+    <div className="hidden min-w-0 md:grid md:grid-cols-1 md:gap-6 lg:grid-cols-[minmax(0,240px)_minmax(0,1fr)]">
       <DesignFilters
         layout="sidebar"
         value={state.filters}
         taxonomies={state.taxonomies}
         onChange={state.setFilters}
       />
-      <div>
-        <div className="mb-4 flex items-end justify-between">
+      <div className="min-w-0">
+        <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
           <h2 className="font-[family-name:var(--font-display)] text-2xl">
             Mi catálogo
           </h2>
@@ -153,7 +153,7 @@ export function CatalogDesktop() {
         </div>
         {state.loading ? <p className="text-sm text-text-muted">Cargando…</p> : null}
         {state.error ? <p className="text-sm text-brand-red">{state.error}</p> : null}
-        <div className="grid grid-cols-3 gap-4 xl:grid-cols-4">
+        <div className="grid grid-cols-2 gap-4 xl:grid-cols-3 2xl:grid-cols-4">
           {state.filtered.map((design) => (
             <DesignCard
               key={design.id}

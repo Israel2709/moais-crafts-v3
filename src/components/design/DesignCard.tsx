@@ -14,7 +14,7 @@ export function DesignCard({
   return (
     <a
       href={href}
-      className="group overflow-hidden rounded-2xl border border-border bg-bg-panel transition hover:border-brand-cyan"
+      className="group min-w-0 overflow-hidden rounded-2xl border border-border bg-bg-panel transition hover:border-brand-cyan"
     >
       <div className="aspect-square bg-bg-elevated">
         {preview ? (
@@ -30,11 +30,11 @@ export function DesignCard({
           </div>
         )}
       </div>
-      <div className="space-y-1 p-3">
-        <p className="line-clamp-2 text-sm font-medium text-brand-cream group-hover:text-brand-cyan">
+      <div className="min-w-0 space-y-1 p-3">
+        <p className="line-clamp-2 break-words text-sm font-medium text-brand-cream group-hover:text-brand-cyan">
           {design.title}
         </p>
-        <p className="text-xs text-text-muted">
+        <p className="truncate text-xs text-text-muted">
           {design.category} · {design.season} · {design.franchise}
         </p>
         <p className="text-[10px] uppercase tracking-wide text-brand-orange">
