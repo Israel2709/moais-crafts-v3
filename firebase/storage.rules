@@ -1,0 +1,20 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // v1: no client writes. Public read only for previews path optional.
+    // Prefer serving via Admin-generated URLs / makePublic on upload.
+    match /moais-catalog/{designId}/previews/{fileName} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /moais-catalog/{designId}/files/{fileName} {
+      allow read: if false;
+      allow write: if false;
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

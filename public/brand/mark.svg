@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="Moai's Crafts">
+  <rect width="120" height="120" fill="#0F1214"/>
+  <circle cx="60" cy="60" r="46" fill="none" stroke="#E52918" stroke-width="6"/>
+  <circle cx="60" cy="60" r="34" fill="none" stroke="#FEEADC" stroke-width="2"/>
+  <text x="60" y="68" text-anchor="middle" font-family="Arial, sans-serif" font-size="28" font-weight="700" fill="#79C8CA">MC</text>
+</svg>

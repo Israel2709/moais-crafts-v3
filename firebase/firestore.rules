@@ -1,0 +1,24 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isPublishedDesign() {
+      return resource.data.status == 'published';
+    }
+
+    // v1: no client writes. Admin SDK bypasses rules.
+    // Future: auth + moaisCatalog_admins/{uid}
+    match /moaisCatalog_designs/{designId} {
+      allow read: if isPublishedDesign();
+      allow write: if false;
+    }
+
+    match /moaisCatalog_taxonomies/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /moaisCatalog_admins/{uid} {
+      allow read, write: if false;
+    }
+  }
+}
