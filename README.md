@@ -23,7 +23,7 @@ cp .env.local.example .env.local
 - Firebase client keys del proyecto `raziel-app-hub`
 - `FIREBASE_SERVICE_ACCOUNT_JSON` (JSON del service account en una línea)
 - `MOAIS_ADMIN_SECRET` (secreto temporal para admin)
-- Google OAuth (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, redirect `http://localhost:3000/api/drive/callback`)
+- Google OAuth (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, redirect `http://localhost:3040/api/drive/callback`)
 - Opcional: `GOOGLE_DRIVE_ROOT_FOLDER_ID`, `GOOGLE_DRIVE_REFRESH_TOKEN`
 
 3. Despliega rules (CLI Firebase):
@@ -41,7 +41,7 @@ npm install
 npm run dev
 ```
 
-5. Abre `http://localhost:3000`, ingresa el admin secret, luego **Conectar Google Drive** desde Explorar (guarda refresh token en `.data/drive-token.json`).
+5. Abre `http://localhost:3040`, ingresa el admin secret, luego **Conectar Google Drive** desde Explorar (guarda refresh token en `.data/drive-token.json`).
 
 ## Rutas
 
