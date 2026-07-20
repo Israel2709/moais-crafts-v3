@@ -7,6 +7,7 @@ import {
   LuBox,
   LuFolderOpen,
   LuGlobe,
+  LuHeart,
   LuHouse,
   LuLibrary,
   LuPanelLeftClose,
@@ -17,6 +18,7 @@ import { SiGoogledrive } from "react-icons/si";
 import type { IconType } from "react-icons";
 import { signOut } from "firebase/auth";
 import { getClientAuth } from "@/lib/firebase/client";
+import { kindFromPathname, KIND_ROUTES } from "@/lib/drive/kind-labels";
 
 const SIDEBAR_KEY = "moais-sidebar-collapsed";
 
@@ -24,6 +26,7 @@ const links: { href: string; label: string; icon: IconType }[] = [
   { href: "/", label: "Inicio", icon: LuHouse },
   { href: "/laser", label: "Archivos laser", icon: LuFolderOpen },
   { href: "/3d", label: "Archivos 3D", icon: LuBox },
+  { href: "/amigurumis", label: "Amigurumis", icon: LuHeart },
   { href: "/catalog", label: "Mi catálogo", icon: LuLibrary },
   { href: "/p/catalog", label: "Vista pública", icon: LuGlobe },
 ];
@@ -162,9 +165,7 @@ export function DesktopShell({ children }: { children: React.ReactNode }) {
             Panel de diseños
           </h1>
           <a
-            href={`/api/drive/auth?return=${
-              pathname.startsWith("/3d") ? "/3d" : "/laser"
-            }`}
+            href={`/api/drive/auth?return=${KIND_ROUTES[kindFromPathname(pathname)]}`}
             title="Conectar con Google Drive"
             aria-label="Conectar con Google Drive"
             className="shrink-0 rounded-lg border border-border bg-bg-panel p-2 text-brand-cyan transition hover:border-brand-cyan hover:bg-bg-elevated"

@@ -3,7 +3,7 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { LuChevronUp, LuFolders } from "react-icons/lu";
 import { ExploreDesktop, ExploreMobile } from "@/components/explore/ExploreViews";
-import { KIND_LABELS } from "@/lib/drive/kind-labels";
+import { KIND_DESCRIPTIONS, KIND_LABELS } from "@/lib/drive/kind-labels";
 import type { DesignKind, DriveLibrarySource } from "@/lib/types/design";
 
 function sourcesPanelKey(kind: DesignKind) {
@@ -122,9 +122,7 @@ export function KindDriveExplore({ kind }: { kind: DesignKind }) {
             {KIND_LABELS[kind]}
           </h2>
           <p className="mt-1 text-sm text-text-muted">
-            {kind === "laser"
-              ? "Fuentes de Drive con diseños para corte láser. Puedes agregar varias carpetas."
-              : "Fuentes de Drive con archivos 3D (STL, etc.). Puedes agregar varias carpetas."}
+            {KIND_DESCRIPTIONS[kind]}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -243,8 +241,8 @@ export function KindDriveExplore({ kind }: { kind: DesignKind }) {
 
       {root ? (
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <ExploreMobile root={root} />
-          <ExploreDesktop root={root} />
+          <ExploreMobile root={root} kind={kind} />
+          <ExploreDesktop root={root} kind={kind} />
         </div>
       ) : !loading ? (
         <p className="text-sm text-text-muted">

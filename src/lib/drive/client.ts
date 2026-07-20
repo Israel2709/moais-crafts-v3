@@ -114,33 +114,124 @@ function mapFile(file: {
 export async function listDriveChildren(folderId: string): Promise<DriveItem[]> {
   const drive = await getAuthenticatedDrive();
   const parent = folderId || "root";
-  const res = await drive.files.list({
-    q: `'${parent}' in parents and trashed = false`,
-    pageSize: 100,
-    fields:
-      "files(id,name,mimeType,modifiedTime,size,thumbnailLink,iconLink,webViewLink,parents)",
-    orderBy: "folder,name_natural",
-    supportsAllDrives: true,
-    includeItemsFromAllDrives: true,
-  });
+  const items: DriveItem[] = [];
+  let pageToken: string | undefined;
 
-  return (res.data.files ?? []).map(mapFile);
+  do {
+    const res = await drive.files.list({
+      q: `'${parent}' in parents and trashed = false`,
+      pageSize: 1000,
+      pageToken,
+      fields:
+        "nextPageToken,files(id,name,mimeType,modifiedTime,size,thumbnailLink,iconLink,webViewLink,parents)",
+      orderBy: "folder,name_natural",
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+    });
+
+    for (const file of res.data.files ?? []) {
+      items.push(mapFile(file));
+    }
+    pageToken = res.data.nextPageToken ?? undefined;
+  } while (pageToken);
+
+  return items;
 }
 
-export async function searchDriveFiles(query: string): Promise<DriveItem[]> {
+export async function searchDriveFiles(
+  query: string,
+  options?: { rootFolderIds?: string[] },
+): Promise<DriveItem[]> {
+  const rootFolderIds = options?.rootFolderIds?.filter(Boolean) ?? [];
+  if (rootFolderIds.length === 0) {
+    return [];
+  }
+
   const drive = await getAuthenticatedDrive();
   const safe = query.replace(/'/g, "\\'");
-  const res = await drive.files.list({
-    q: `name contains '${safe}' and trashed = false`,
-    pageSize: 50,
-    fields:
-      "files(id,name,mimeType,modifiedTime,size,thumbnailLink,iconLink,webViewLink,parents)",
-    orderBy: "modifiedTime desc",
-    supportsAllDrives: true,
-    includeItemsFromAllDrives: true,
-  });
+  const rootSet = new Set(rootFolderIds);
+  const candidates: DriveItem[] = [];
+  let pageToken: string | undefined;
+  let pages = 0;
 
-  return (res.data.files ?? []).map(mapFile);
+  do {
+    const res = await drive.files.list({
+      q: `name contains '${safe}' and trashed = false`,
+      pageSize: 100,
+      pageToken,
+      fields:
+        "nextPageToken,files(id,name,mimeType,modifiedTime,size,thumbnailLink,iconLink,webViewLink,parents)",
+      orderBy: "modifiedTime desc",
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+    });
+
+    for (const file of res.data.files ?? []) {
+      candidates.push(mapFile(file));
+    }
+    pageToken = res.data.nextPageToken ?? undefined;
+    pages += 1;
+  } while (pageToken && pages < 5);
+
+  const parentCache = new Map<string, string[]>();
+  const matched: DriveItem[] = [];
+
+  for (const item of candidates) {
+    if (rootSet.has(item.id)) {
+      matched.push(item);
+      continue;
+    }
+    if (await isUnderAnyRoot(drive, item, rootSet, parentCache)) {
+      matched.push(item);
+    }
+  }
+
+  return matched;
+}
+
+async function isUnderAnyRoot(
+  drive: Awaited<ReturnType<typeof getAuthenticatedDrive>>,
+  item: DriveItem,
+  rootIds: Set<string>,
+  parentCache: Map<string, string[]>,
+): Promise<boolean> {
+  const queue = [...item.parents];
+  const seen = new Set<string>();
+
+  while (queue.length > 0) {
+    const id = queue.shift()!;
+    if (rootIds.has(id)) {
+      return true;
+    }
+    if (seen.has(id)) {
+      continue;
+    }
+    seen.add(id);
+
+    let parents = parentCache.get(id);
+    if (!parents) {
+      try {
+        const meta = await drive.files.get({
+          fileId: id,
+          fields: "parents",
+          supportsAllDrives: true,
+        });
+        parents = meta.data.parents ?? [];
+      } catch {
+        parents = [];
+      }
+      parentCache.set(id, parents);
+    }
+
+    for (const parentId of parents) {
+      if (rootIds.has(parentId)) {
+        return true;
+      }
+      queue.push(parentId);
+    }
+  }
+
+  return false;
 }
 
 export async function getDriveFileMeta(fileId: string) {

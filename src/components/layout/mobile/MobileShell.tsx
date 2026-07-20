@@ -7,6 +7,7 @@ import { SignOutButton } from "@/components/admin/SignOutButton";
 const tabs = [
   { href: "/laser", label: "Laser" },
   { href: "/3d", label: "3D" },
+  { href: "/amigurumis", label: "Ami" },
   { href: "/catalog", label: "Catálogo" },
 ];
 
@@ -38,7 +39,7 @@ export function MobileShell({ children }: { children: React.ReactNode }) {
       </main>
 
       <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-bg-elevated/95 backdrop-blur">
-        <ul className="grid grid-cols-3">
+        <ul className="grid grid-cols-4">
           {tabs.map((tab) => {
             const active =
               pathname === tab.href || pathname.startsWith(`${tab.href}/`);
@@ -46,7 +47,7 @@ export function MobileShell({ children }: { children: React.ReactNode }) {
               <li key={tab.href}>
                 <Link
                   href={tab.href}
-                  className={`flex flex-col items-center gap-1 px-2 py-3 text-xs ${
+                  className={`flex flex-col items-center gap-1 px-1 py-3 text-[11px] ${
                     active ? "text-brand-cyan" : "text-text-muted"
                   }`}
                 >

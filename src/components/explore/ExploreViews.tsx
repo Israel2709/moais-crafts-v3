@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import type { DriveItem, Taxonomies } from "@/lib/types/design";
+import type { DesignKind, DriveItem, Taxonomies } from "@/lib/types/design";
 
 type Crumb = { id: string; name: string };
 
@@ -11,7 +11,10 @@ const DEFAULT_TAXONOMIES: Taxonomies = {
   franchises: ["sin-franquicia"],
 };
 
-function useExploreState(root: { id: string; name: string } | null) {
+function useExploreState(
+  root: { id: string; name: string } | null,
+  kind: DesignKind,
+) {
   const [crumbs, setCrumbs] = useState<Crumb[]>([]);
   const [items, setItems] = useState<DriveItem[]>([]);
   const [query, setQuery] = useState("");
@@ -88,7 +91,9 @@ function useExploreState(root: { id: string; name: string } | null) {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/drive/search?q=${encodeURIComponent(query.trim())}`);
+      const res = await fetch(
+        `/api/drive/search?q=${encodeURIComponent(query.trim())}&kind=${encodeURIComponent(kind)}`,
+      );
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Error en búsqueda");
       setItems(data.items ?? []);
@@ -175,10 +180,12 @@ function useExploreState(root: { id: string; name: string } | null) {
 
 export function ExploreMobile({
   root,
+  kind,
 }: {
   root: { id: string; name: string };
+  kind: DesignKind;
 }) {
-  const state = useExploreState(root);
+  const state = useExploreState(root, kind);
 
   return (
     <div className="space-y-4 md:hidden">
@@ -320,10 +327,12 @@ export function ExploreMobile({
 
 export function ExploreDesktop({
   root,
+  kind,
 }: {
   root: { id: string; name: string };
+  kind: DesignKind;
 }) {
-  const state = useExploreState(root);
+  const state = useExploreState(root, kind);
 
   return (
     <div className="hidden h-full min-h-0 min-w-0 flex-1 md:grid md:grid-cols-1 md:grid-rows-[minmax(0,1fr)] md:gap-4 xl:grid-cols-[minmax(0,240px)_minmax(0,1fr)_minmax(0,300px)]">

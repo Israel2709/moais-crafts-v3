@@ -6,7 +6,7 @@ import type { DesignKind, DriveLibrarySource } from "@/lib/types/design";
 import { extractDriveFolderId } from "@/lib/drive/folder-id";
 
 const createSchema = z.object({
-  kind: z.enum(["laser", "3d"]),
+  kind: z.enum(["laser", "3d", "amigurumis"]),
   name: z.string().trim().min(1).max(120),
   folderId: z.string().trim().min(1).max(200),
 });

@@ -51,6 +51,7 @@ npm run dev
 | `/` | Home admin |
 | `/laser` | Fuentes Drive + exploración de archivos laser |
 | `/3d` | Fuentes Drive + exploración de archivos 3D |
+| `/amigurumis` | Fuentes Drive + exploración de amigurumis |
 | `/catalog` | Catálogo propio + filtros |
 | `/catalog/[id]` | Detalle / editar / publicar |
 | `/p/catalog` | Stub público (`published`) sin login |

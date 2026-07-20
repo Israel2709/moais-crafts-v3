@@ -33,10 +33,19 @@ export default function HomePage() {
           </p>
         </Link>
         <Link
-          href="/catalog"
-          className="rounded-2xl border border-border bg-bg-panel p-5 transition hover:border-brand-cream sm:col-span-2"
+          href="/amigurumis"
+          className="rounded-2xl border border-border bg-bg-panel p-5 transition hover:border-brand-cream"
         >
-          <p className="text-brand-cream">Mi catálogo</p>
+          <p className="text-brand-cream">Amigurumis</p>
+          <p className="mt-2 text-sm text-text-muted">
+            Carpetas de Drive con patrones y archivos de amigurumis.
+          </p>
+        </Link>
+        <Link
+          href="/catalog"
+          className="rounded-2xl border border-border bg-bg-panel p-5 transition hover:border-brand-cyan"
+        >
+          <p className="text-brand-cyan">Mi catálogo</p>
           <p className="mt-2 text-sm text-text-muted">
             Solo lo que ya curaste — listo para publicar después.
           </p>

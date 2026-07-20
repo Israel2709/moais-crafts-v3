@@ -10,8 +10,9 @@ import {
   listDriveLibrarySources,
 } from "@/lib/drive/sources";
 import type { DesignKind } from "@/lib/types/design";
+import { DESIGN_KINDS } from "@/lib/drive/kind-labels";
 
-const kindSchema = z.enum(["laser", "3d"]);
+const kindSchema = z.enum(DESIGN_KINDS);
 
 export async function GET(request: NextRequest) {
   try {
@@ -23,7 +24,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     if (error instanceof z.ZodError) {
       return Response.json(
-        { error: "Query kind=laser|3d is required" },
+        { error: "Query kind=laser|3d|amigurumis is required" },
         { status: 400 },
       );
     }

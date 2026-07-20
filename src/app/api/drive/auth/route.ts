@@ -1,21 +1,29 @@
 import { NextRequest } from "next/server";
 import { getDriveAuthUrl } from "@/lib/drive/client";
+import { KIND_ROUTES, kindFromPathname } from "@/lib/drive/kind-labels";
+import type { DesignKind } from "@/lib/types/design";
 import {
   AdminAuthError,
   adminErrorResponse,
   assertAdminRequest,
 } from "@/lib/auth/session";
 
-function resolveReturnPath(request: NextRequest): "/laser" | "/3d" {
+function resolveReturnPath(request: NextRequest): `/${DesignKind}` {
   const explicit = request.nextUrl.searchParams.get("return");
-  if (explicit === "/3d" || explicit === "/laser") {
+  if (
+    explicit === "/3d" ||
+    explicit === "/laser" ||
+    explicit === "/amigurumis"
+  ) {
     return explicit;
   }
   const referer = request.headers.get("referer") ?? "";
-  if (referer.includes("/3d")) {
-    return "/3d";
+  try {
+    const path = new URL(referer).pathname;
+    return KIND_ROUTES[kindFromPathname(path)];
+  } catch {
+    return "/laser";
   }
-  return "/laser";
 }
 
 export async function GET(request: NextRequest) {
