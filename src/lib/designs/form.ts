@@ -7,6 +7,7 @@ export type DesignFormValues = {
   suggestedPrice: string;
   fabricationTime: string;
   driveLocation: string;
+  description: string;
   notes: string;
 };
 
@@ -19,6 +20,7 @@ export const EMPTY_DESIGN_FORM: DesignFormValues = {
   suggestedPrice: "",
   fabricationTime: "",
   driveLocation: "",
+  description: "",
   notes: "",
 };
 

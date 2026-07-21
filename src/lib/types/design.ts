@@ -35,6 +35,7 @@ export type Design = {
   previewPaths: string[];
   filePaths: string[];
   source: DriveSource | null;
+  description: string;
   notes: string;
   createdAt: string;
   updatedAt: string;

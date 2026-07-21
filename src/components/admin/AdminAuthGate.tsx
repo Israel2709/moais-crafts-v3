@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   GoogleAuthProvider,
   signInWithEmailAndPassword,
@@ -8,18 +9,31 @@ import {
   signOut,
 } from "firebase/auth";
 import { getClientAuth } from "@/lib/firebase/client";
+import type { AuthRole } from "@/lib/auth/index";
 
-async function createSession(idToken: string) {
+type SessionResponse = {
+  authenticated?: boolean;
+  role?: AuthRole | null;
+  error?: string;
+  user?: { email?: string; role?: AuthRole };
+};
+
+async function createSession(idToken: string): Promise<AuthRole> {
   const res = await fetch("/api/auth/session", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ idToken }),
   });
-  const data = (await res.json()) as { error?: string };
+  const data = (await res.json()) as SessionResponse;
   if (!res.ok) {
     await signOut(getClientAuth()).catch(() => undefined);
     throw new Error(data.error || "No se pudo crear la sesión");
   }
+  const role = data.role ?? data.user?.role;
+  if (!role) {
+    throw new Error("No se pudo determinar el rol del usuario");
+  }
+  return role;
 }
 
 function authErrorMessage(error: unknown): string {
@@ -41,6 +55,7 @@ function authErrorMessage(error: unknown): string {
 }
 
 export function AdminAuthGate({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
   const [ready, setReady] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
   const [email, setEmail] = useState("");
@@ -51,12 +66,24 @@ export function AdminAuthGate({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     void fetch("/api/auth/session")
       .then((res) => res.json())
-      .then((data: { authenticated?: boolean }) => {
-        setAuthenticated(Boolean(data.authenticated));
+      .then((data: SessionResponse) => {
+        if (data.authenticated && data.role === "seller") {
+          router.replace("/p/catalog");
+          return;
+        }
+        setAuthenticated(Boolean(data.authenticated && data.role === "admin"));
         setReady(true);
       })
       .catch(() => setReady(true));
-  }, []);
+  }, [router]);
+
+  async function finishLogin(role: AuthRole) {
+    if (role === "seller") {
+      router.replace("/p/catalog");
+      return;
+    }
+    setAuthenticated(true);
+  }
 
   async function onEmailSubmit(event: FormEvent) {
     event.preventDefault();
@@ -69,8 +96,8 @@ export function AdminAuthGate({ children }: { children: React.ReactNode }) {
         password,
       );
       const idToken = await credential.user.getIdToken();
-      await createSession(idToken);
-      setAuthenticated(true);
+      const role = await createSession(idToken);
+      await finishLogin(role);
     } catch (err) {
       setError(authErrorMessage(err));
     } finally {
@@ -86,8 +113,8 @@ export function AdminAuthGate({ children }: { children: React.ReactNode }) {
       provider.setCustomParameters({ prompt: "select_account" });
       const credential = await signInWithPopup(getClientAuth(), provider);
       const idToken = await credential.user.getIdToken();
-      await createSession(idToken);
-      setAuthenticated(true);
+      const role = await createSession(idToken);
+      await finishLogin(role);
     } catch (err) {
       setError(authErrorMessage(err));
     } finally {
@@ -108,11 +135,11 @@ export function AdminAuthGate({ children }: { children: React.ReactNode }) {
       <div className="flex min-h-dvh items-center justify-center px-4">
         <div className="w-full max-w-md rounded-2xl border border-border bg-bg-elevated p-6 shadow-xl">
           <p className="font-[family-name:var(--font-display)] text-lg text-brand-cyan">
-            Acceso admin
+            Moai&apos;s Crafts
           </p>
           <p className="mt-2 text-sm text-text-muted">
-            Entra con Google o correo. Solo el super admin autorizado puede
-            continuar.
+            Entra con Google o correo. Admins van al panel; vendedores a los
+            catálogos de venta.
           </p>
 
           <button
@@ -158,14 +185,6 @@ export function AdminAuthGate({ children }: { children: React.ReactNode }) {
               {loading ? "Entrando…" : "Entrar"}
             </button>
           </form>
-
-          <p className="mt-4 text-center text-xs text-text-muted">
-            La vista pública{" "}
-            <a className="text-brand-cyan underline" href="/p/catalog">
-              /p/catalog
-            </a>{" "}
-            no requiere login.
-          </p>
         </div>
       </div>
     );

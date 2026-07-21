@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import { LuLoaderCircle } from "react-icons/lu";
 import { DesignCard } from "@/components/design/DesignCard";
+import { cacheDesigns } from "@/lib/designs/client-cache";
 import type { Design } from "@/lib/types/design";
 import type { SalesCatalog } from "@/lib/types/sales-catalog";
 
@@ -19,7 +21,9 @@ export default function PublicSalesCatalogPage() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "No encontrado");
         setCatalog(data.catalog);
-        setDesigns(data.designs ?? []);
+        const nextDesigns: Design[] = data.designs ?? [];
+        cacheDesigns(nextDesigns);
+        setDesigns(nextDesigns);
       })
       .catch((err: Error) => setError(err.message));
   }, [params.id]);
@@ -37,7 +41,13 @@ export default function PublicSalesCatalogPage() {
 
   if (!catalog) {
     return (
-      <div className="min-h-dvh px-4 py-8 text-text-muted">Cargando…</div>
+      <div className="flex min-h-dvh flex-col items-center justify-center gap-3 px-4">
+        <LuLoaderCircle
+          className="h-8 w-8 animate-spin text-brand-cyan"
+          aria-hidden
+        />
+        <p className="text-sm text-text-muted">Cargando…</p>
+      </div>
     );
   }
 
@@ -61,7 +71,7 @@ export default function PublicSalesCatalogPage() {
           <DesignCard
             key={design.id}
             design={design}
-            href={`/p/design/${design.id}`}
+            href={`/p/design/${design.id}?from=${encodeURIComponent(`/p/catalog/${catalog.slug}`)}`}
           />
         ))}
       </div>

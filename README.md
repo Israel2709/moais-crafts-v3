@@ -23,7 +23,9 @@ cp .env.local.example .env.local
 - Firebase client keys del proyecto `raziel-app-hub`
 - `FIREBASE_SERVICE_ACCOUNT_PATH` → `.data/firebase-service-account.json` (gitignored), o `FIREBASE_SERVICE_ACCOUNT_JSON` en una línea
 - `MOAIS_SUPER_ADMIN_EMAILS` (p. ej. `israel.salinas.m@gmail.com`)
+- `MOAIS_SELLER_EMAILS` (correos de vendedores, separados por coma)
 - En Firebase Console: Auth con Google y/o correo-contraseña habilitados
+- Crea en Firebase Auth cada usuario vendedor (correo+contraseña o Google) y agrégalo a `MOAIS_SELLER_EMAILS`
 - Google Drive OAuth (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, redirect `http://localhost:3040/api/drive/callback`) — aparte del login
 - Opcional: `GOOGLE_DRIVE_ROOT_FOLDER_ID`, `GOOGLE_DRIVE_REFRESH_TOKEN`
 
@@ -63,9 +65,10 @@ npm run dev
 
 ## Auth
 
-- **Admin:** Firebase Auth (Google + correo/contraseña) + session cookie httpOnly.
-- Solo emails listados en `MOAIS_SUPER_ADMIN_EMAILS` pasan el gate y las APIs admin.
-- **Público / vendedor:** `/p/catalog` lista catálogos de venta publicados; un diseño solo es visible si pertenece a alguno.
+- **Login único** en `/` (Firebase Auth: Google + correo/contraseña) + session cookie httpOnly.
+- **Admin:** emails en `MOAIS_SUPER_ADMIN_EMAILS` → panel admin.
+- **Vendedor:** emails en `MOAIS_SELLER_EMAILS` → al entrar van directo a `/p/catalog`.
+- `/p/*` requiere sesión de vendedor o admin.
 - **Drive OAuth** es independiente del login (credenciales `GOOGLE_CLIENT_*`).
 - Colección `moaisCatalog_admins` reservada para allowlist en Firestore más adelante.
 

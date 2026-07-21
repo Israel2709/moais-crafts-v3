@@ -242,7 +242,7 @@ export function KindDriveExplore({ kind }: { kind: DesignKind }) {
       {root ? (
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <ExplorePanel
-            key={`${kind}-${sources.map((s) => s.folderId).sort().join("|")}`}
+            key={`${kind}-${activeId ?? "none"}-${root.id}`}
             root={root}
             kind={kind}
           />

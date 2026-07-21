@@ -2,8 +2,8 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DesignForm } from "@/components/design/DesignForm";
-import { DesignFolderResultCard } from "@/components/explore/DesignFolderResultCard";
 import { SearchProgressBar } from "@/components/explore/SearchProgressBar";
+import { SearchResultsGrid } from "@/components/explore/SearchResultsGrid";
 import {
   EMPTY_DESIGN_FORM,
   type DesignFormValues,
@@ -134,7 +134,9 @@ function useExploreState(
   const [message, setMessage] = useState<string | null>(null);
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
-  const requestSeq = useRef(0);
+  const folderSeq = useRef(0);
+  const searchSeq = useRef(0);
+  const indexSeq = useRef(0);
   const indexAbort = useRef<AbortController | null>(null);
 
   const rootId = root?.id ?? null;
@@ -168,11 +170,13 @@ function useExploreState(
       return;
     }
     setCrumbs([{ id: rootId, name: rootName }]);
+    setItems([]);
     setSelected(null);
     setSelectedHit(null);
     setSearchHits(null);
     setQuery("");
     setMessage(null);
+    setError(null);
   }, [rootId, rootName, kind]);
 
   useEffect(() => {
@@ -180,7 +184,7 @@ function useExploreState(
   }, [loadIndexMeta]);
 
   const loadFolder = useCallback(async (folderId: string) => {
-    const seq = ++requestSeq.current;
+    const seq = ++folderSeq.current;
     setLoading(true);
     setError(null);
     try {
@@ -188,15 +192,15 @@ function useExploreState(
         `/api/drive/list?folderId=${encodeURIComponent(folderId)}`,
       );
       const data = await res.json();
-      if (seq !== requestSeq.current) return;
+      if (seq !== folderSeq.current) return;
       if (!res.ok) throw new Error(data.error || "Error al listar Drive");
       setItems(data.items ?? []);
     } catch (err) {
-      if (seq !== requestSeq.current) return;
+      if (seq !== folderSeq.current) return;
       setError(err instanceof Error ? err.message : "Error");
       setItems([]);
     } finally {
-      if (seq === requestSeq.current) setLoading(false);
+      if (seq === folderSeq.current) setLoading(false);
     }
   }, []);
 
@@ -223,7 +227,7 @@ function useExploreState(
   }
 
   async function rebuildIndex() {
-    const seq = ++requestSeq.current;
+    const seq = ++indexSeq.current;
     indexAbort.current?.abort();
     const abort = new AbortController();
     indexAbort.current = abort;
@@ -244,7 +248,7 @@ function useExploreState(
         `/api/drive/index?kind=${encodeURIComponent(kind)}`,
         { method: "POST", signal: abort.signal },
       );
-      if (seq !== requestSeq.current) return;
+      if (seq !== indexSeq.current) return;
 
       if (!res.ok) {
         const data = (await res.json().catch(() => null)) as {
@@ -255,22 +259,25 @@ function useExploreState(
 
       await consumeDesignSearchStream(res, {
         onProgress: (progress) => {
-          if (seq !== requestSeq.current) return;
+          if (seq !== indexSeq.current) return;
           setIndexProgress(progress);
         },
         onMessage: (msg) => {
-          if (seq !== requestSeq.current) return;
+          if (seq !== indexSeq.current) return;
           setMessage(msg);
         },
       });
 
-      if (seq !== requestSeq.current) return;
+      if (seq !== indexSeq.current) return;
       await loadIndexMeta();
+      if (currentFolderId && !isSearchMode) {
+        void loadFolder(currentFolderId);
+      }
     } catch (err) {
-      if (abort.signal.aborted || seq !== requestSeq.current) return;
+      if (abort.signal.aborted || seq !== indexSeq.current) return;
       setError(err instanceof Error ? err.message : "Error");
     } finally {
-      if (seq === requestSeq.current) {
+      if (seq === indexSeq.current) {
         setIndexing(false);
         setIndexProgress(null);
       }
@@ -283,7 +290,7 @@ function useExploreState(
       clearSearch();
       return;
     }
-    const seq = ++requestSeq.current;
+    const seq = ++searchSeq.current;
     setLoading(true);
     setError(null);
     setSelected(null);
@@ -301,17 +308,17 @@ function useExploreState(
         meta?: DriveIndexMeta | null;
         error?: string;
       };
-      if (seq !== requestSeq.current) return;
+      if (seq !== searchSeq.current) return;
       if (!res.ok) throw new Error(data.error || "Error en búsqueda");
       setSearchHits(data.items ?? []);
       if (data.meta) setIndexMeta(data.meta);
       if (data.message) setError(data.message);
     } catch (err) {
-      if (seq !== requestSeq.current) return;
+      if (seq !== searchSeq.current) return;
       setError(err instanceof Error ? err.message : "Error");
       setSearchHits([]);
     } finally {
-      if (seq === requestSeq.current) setLoading(false);
+      if (seq === searchSeq.current) setLoading(false);
     }
   }
 
@@ -376,6 +383,7 @@ function useExploreState(
             suggestedPrice: form.suggestedPrice,
             fabricationTime: form.fabricationTime,
             driveLocation: form.driveLocation || selectedHit.path,
+            description: form.description,
             notes: form.notes,
           }
         : {
@@ -388,6 +396,7 @@ function useExploreState(
             suggestedPrice: form.suggestedPrice,
             fabricationTime: form.fabricationTime,
             driveLocation: form.driveLocation,
+            description: form.description,
             notes: form.notes,
           };
       const res = await fetch("/api/designs/from-drive", {
@@ -541,18 +550,14 @@ export function ExploreMobile({
       ) : null}
 
       {state.isSearchMode ? (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {(state.searchHits ?? []).map((hit) => (
-            <DesignFolderResultCard
-              key={hit.id}
-              hit={hit}
-              selected={state.selectedHit?.id === hit.id}
-              onAdd={() => state.selectHit(hit)}
-            />
-          ))}
-          {!state.loading && (state.searchHits?.length ?? 0) === 0 ? (
-            <p className="text-sm text-text-muted">Sin coincidencias.</p>
-          ) : null}
+        <div className="flex min-h-[50vh] flex-col">
+          <SearchResultsGrid
+            items={state.searchHits ?? []}
+            selectedId={state.selectedHit?.id}
+            onAdd={state.selectHit}
+            layout="mobile"
+            loading={state.loading}
+          />
         </div>
       ) : (
         <ul className="divide-y divide-border rounded-2xl border border-border bg-bg-panel">
@@ -651,20 +656,14 @@ export function ExploreDesktop({
           {state.message ? (
             <p className="shrink-0 text-sm text-brand-cyan">{state.message}</p>
           ) : null}
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-4">
-              {(state.searchHits ?? []).map((hit) => (
-                <DesignFolderResultCard
-                  key={hit.id}
-                  hit={hit}
-                  selected={state.selectedHit?.id === hit.id}
-                  onAdd={() => state.selectHit(hit)}
-                />
-              ))}
-            </div>
-            {!state.loading && (state.searchHits?.length ?? 0) === 0 ? (
-              <p className="mt-4 text-sm text-text-muted">Sin coincidencias.</p>
-            ) : null}
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <SearchResultsGrid
+              items={state.searchHits ?? []}
+              selectedId={state.selectedHit?.id}
+              onAdd={state.selectHit}
+              layout="desktop"
+              loading={state.loading}
+            />
           </div>
         </section>
 

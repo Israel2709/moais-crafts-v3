@@ -44,6 +44,7 @@ function mapDesign(id: string, data: DocumentData): Design {
     previewPaths: data.previewPaths ?? [],
     filePaths: data.filePaths ?? [],
     source: data.source ?? null,
+    description: data.description ?? "",
     notes: data.notes ?? "",
     createdAt: data.createdAt?.toDate?.()?.toISOString?.() ?? data.createdAt ?? "",
     updatedAt: data.updatedAt?.toDate?.()?.toISOString?.() ?? data.updatedAt ?? "",
@@ -220,6 +221,7 @@ export async function createDesignFromDrive(input: {
   suggestedPrice?: number | null;
   fabricationTime?: string;
   driveLocation?: string;
+  description?: string;
   notes?: string;
 }): Promise<Design> {
   const existing = await findDesignByDriveFileId(input.driveFileId);
@@ -278,6 +280,7 @@ export async function createDesignFromDrive(input: {
       mimeType: meta.mimeType,
       name: meta.name,
     },
+    description: input.description ?? "",
     notes: input.notes ?? "",
     createdAt: now,
     updatedAt: now,
@@ -307,6 +310,7 @@ export async function createDesignFromDriveFolder(input: {
   fabricationTime?: string;
   driveLocation?: string;
   drivePath?: string;
+  description?: string;
   notes?: string;
   extraPreviewFiles?: { buffer: Buffer; mimeType: string; name: string }[];
 }): Promise<Design> {
@@ -410,6 +414,7 @@ export async function createDesignFromDriveFolder(input: {
       mimeType: meta.mimeType,
       name: meta.name,
     },
+    description: input.description ?? "",
     notes: input.notes ?? "",
     createdAt: now,
     updatedAt: now,
@@ -437,6 +442,7 @@ export async function createDesignFromUpload(input: {
   suggestedPrice?: number | null;
   fabricationTime?: string;
   driveLocation?: string;
+  description?: string;
   notes?: string;
   previewFiles: { buffer: Buffer; mimeType: string; name: string }[];
   designFiles?: { buffer: Buffer; mimeType: string; name: string }[];
@@ -490,6 +496,7 @@ export async function createDesignFromUpload(input: {
     previewPaths,
     filePaths,
     source: null,
+    description: input.description ?? "",
     notes: input.notes ?? "",
     createdAt: now,
     updatedAt: now,
@@ -521,6 +528,7 @@ export async function updateDesign(
       | "suggestedPrice"
       | "fabricationTime"
       | "driveLocation"
+      | "description"
       | "notes"
     >
   >,

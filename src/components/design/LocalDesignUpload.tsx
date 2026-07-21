@@ -47,6 +47,7 @@ export function LocalDesignUpload() {
       body.set("suggestedPrice", values.suggestedPrice);
       body.set("fabricationTime", values.fabricationTime);
       body.set("driveLocation", values.driveLocation);
+      body.set("description", values.description);
       body.set("notes", values.notes);
       for (const file of previewFiles) {
         body.append("previews", file);

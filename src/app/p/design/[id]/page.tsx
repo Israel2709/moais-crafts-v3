@@ -1,75 +1,90 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { resolveTermLabel } from "@/lib/designs/labels";
+import { LuLoaderCircle } from "react-icons/lu";
+import { SellerProductDetail } from "@/components/catalog/SellerProductDetail";
+import {
+  cacheDesign,
+  getCachedDesign,
+} from "@/lib/designs/client-cache";
 import type { Design } from "@/lib/types/design";
 
-export default function PublicDesignPage() {
+function safeBackHref(from: string | null): string {
+  if (!from) return "/p/catalog";
+  if (!from.startsWith("/p/")) return "/p/catalog";
+  return from;
+}
+
+function LoadingState() {
+  return (
+    <div className="flex min-h-dvh flex-col items-center justify-center gap-3 px-4">
+      <LuLoaderCircle
+        className="h-8 w-8 animate-spin text-brand-cyan"
+        aria-hidden
+      />
+      <p className="text-sm text-text-muted">Cargando…</p>
+    </div>
+  );
+}
+
+function PublicDesignPageInner() {
   const params = useParams<{ id: string }>();
-  const [design, setDesign] = useState<Design | null>(null);
+  const searchParams = useSearchParams();
+  const backHref = safeBackHref(searchParams.get("from"));
+  const [design, setDesign] = useState<Design | null>(
+    () => getCachedDesign(params.id) ?? null,
+  );
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    const cached = getCachedDesign(params.id);
+    if (cached) {
+      setDesign(cached);
+      setError(null);
+    }
+
+    let cancelled = false;
     void fetch(`/api/designs/${params.id}`)
       .then(async (res) => {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "No encontrado");
+        if (cancelled) return;
+        cacheDesign(data.design);
         setDesign(data.design);
+        setError(null);
       })
-      .catch((err: Error) => setError(err.message));
+      .catch((err: Error) => {
+        if (cancelled) return;
+        if (!getCachedDesign(params.id)) setError(err.message);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [params.id]);
 
   if (error) {
     return (
       <div className="min-h-dvh px-4 py-8">
         <p className="text-brand-red">{error}</p>
-        <Link href="/p/catalog" className="mt-4 inline-block text-brand-cyan">
-          Volver a catálogos
+        <Link href={backHref} className="mt-4 inline-block text-brand-cyan">
+          Volver
         </Link>
       </div>
     );
   }
 
-  if (!design) {
-    return (
-      <div className="min-h-dvh px-4 py-8 text-text-muted">Cargando…</div>
-    );
-  }
+  if (!design) return <LoadingState />;
 
+  return <SellerProductDetail design={design} backHref={backHref} />;
+}
+
+export default function PublicDesignPage() {
   return (
-    <div className="min-h-dvh px-4 py-8 md:mx-auto md:max-w-3xl md:px-8">
-      <Link href="/p/catalog" className="text-sm text-brand-cyan">
-        ← Catálogos
-      </Link>
-      <div className="mt-4 overflow-hidden rounded-2xl border border-border bg-bg-panel">
-        {design.previewUrls[0] ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={design.previewUrls[0]}
-            alt={design.title}
-            className="aspect-square w-full object-cover md:aspect-video"
-          />
-        ) : (
-          <div className="flex aspect-video items-center justify-center text-text-muted">
-            Sin preview
-          </div>
-        )}
-      </div>
-      <h1 className="mt-6 font-[family-name:var(--font-display)] text-3xl text-brand-cream">
-        {design.title}
-      </h1>
-      <p className="mt-2 text-sm text-text-muted">
-        {resolveTermLabel(design.category)} · {resolveTermLabel(design.season)} ·{" "}
-        {resolveTermLabel(design.franchise)}
-      </p>
-      {design.notes ? (
-        <p className="mt-4 text-brand-cream/90">{design.notes}</p>
-      ) : null}
-      <p className="mt-8 text-sm text-text-muted">
-        Pedidos por WhatsApp llegarán en una próxima versión.
-      </p>
-    </div>
+    <Suspense fallback={<LoadingState />}>
+      <PublicDesignPageInner />
+    </Suspense>
   );
 }

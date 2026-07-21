@@ -45,6 +45,7 @@ export default function CatalogDetailPage() {
         season: design.season,
         franchise: design.franchise,
         notes: design.notes,
+        description: design.description,
       }),
     });
     const data = await res.json();
@@ -141,9 +142,18 @@ export default function CatalogDetailPage() {
         </select>
         <textarea
           className={`${field} min-h-24`}
+          value={design.description}
+          onChange={(e) =>
+            setDesign({ ...design, description: e.target.value })
+          }
+          placeholder="Descripción"
+          required
+        />
+        <textarea
+          className={`${field} min-h-24`}
           value={design.notes}
           onChange={(e) => setDesign({ ...design, notes: e.target.value })}
-          placeholder="Notas"
+          placeholder="Notas internas"
         />
         <div className="flex flex-wrap gap-2">
           {design.fileUrls.map((url) => (

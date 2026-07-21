@@ -123,6 +123,8 @@ export async function listDriveChildren(folderId: string): Promise<DriveItem[]> 
   const items: DriveItem[] = [];
   let pageToken: string | undefined;
 
+  // Do not use orderBy here: with includeItemsFromAllDrives it often fails or
+  // returns empty on Shared Drives (e.g. large 3D vaults). Sort client-side.
   do {
     const res = await drive.files.list({
       q: `'${parent}' in parents and trashed = false`,
@@ -130,7 +132,6 @@ export async function listDriveChildren(folderId: string): Promise<DriveItem[]> 
       pageToken,
       fields:
         "nextPageToken,files(id,name,mimeType,modifiedTime,size,thumbnailLink,iconLink,webViewLink,parents)",
-      orderBy: "folder,name_natural",
       supportsAllDrives: true,
       includeItemsFromAllDrives: true,
     });
@@ -141,7 +142,10 @@ export async function listDriveChildren(folderId: string): Promise<DriveItem[]> 
     pageToken = res.data.nextPageToken ?? undefined;
   } while (pageToken);
 
-  return items;
+  return items.sort((a, b) => {
+    if (a.isFolder !== b.isFolder) return a.isFolder ? -1 : 1;
+    return a.name.localeCompare(b.name, "es", { sensitivity: "base" });
+  });
 }
 
 export async function crawlDesignPackageFolders(

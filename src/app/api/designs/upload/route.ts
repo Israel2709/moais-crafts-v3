@@ -35,7 +35,15 @@ export async function POST(request: NextRequest) {
     const season = String(form.get("season") ?? "").trim() || "todo-el-ano";
     const fabricationTime = String(form.get("fabricationTime") ?? "").trim();
     const driveLocation = String(form.get("driveLocation") ?? "").trim();
+    const description = String(form.get("description") ?? "").trim();
     const notes = String(form.get("notes") ?? "").trim();
+
+    if (!description) {
+      return Response.json(
+        { error: "La descripción es requerida" },
+        { status: 400 },
+      );
+    }
 
     let tags: string[] = [];
     const tagsRaw = form.get("tags");
@@ -89,6 +97,7 @@ export async function POST(request: NextRequest) {
       suggestedPrice,
       fabricationTime,
       driveLocation,
+      description,
       notes,
       previewFiles,
       designFiles,

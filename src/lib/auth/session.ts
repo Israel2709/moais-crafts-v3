@@ -4,6 +4,7 @@ import type { DecodedIdToken } from "firebase-admin/auth";
 import {
   SESSION_COOKIE,
   SESSION_MAX_AGE_MS,
+  getAuthRole,
   isSuperAdminEmail,
   type AuthUser,
 } from "@/lib/auth/index";
@@ -27,28 +28,38 @@ export function adminErrorResponse(error: unknown): Response {
   return Response.json({ error: message }, { status: 500 });
 }
 
-export async function createAdminSessionCookie(idToken: string): Promise<{
+function userFromDecoded(decoded: DecodedIdToken): AuthUser | null {
+  const role = getAuthRole(decoded.email);
+  if (!role) return null;
+  return {
+    uid: decoded.uid,
+    email: decoded.email ?? "",
+    role,
+  };
+}
+
+export async function createSessionCookie(idToken: string): Promise<{
   sessionCookie: string;
   user: AuthUser;
 }> {
   const auth = getAdminAuth();
   const decoded = await auth.verifyIdToken(idToken);
+  const user = userFromDecoded(decoded);
 
-  if (!isSuperAdminEmail(decoded.email)) {
-    throw new AdminAuthError("No autorizado para el panel admin", 403);
+  if (!user) {
+    throw new AdminAuthError("No autorizado para esta app", 403);
   }
 
   const sessionCookie = await auth.createSessionCookie(idToken, {
     expiresIn: SESSION_MAX_AGE_MS,
   });
 
-  return {
-    sessionCookie,
-    user: {
-      uid: decoded.uid,
-      email: decoded.email ?? "",
-    },
-  };
+  return { sessionCookie, user };
+}
+
+/** @deprecated Prefer createSessionCookie */
+export async function createAdminSessionCookie(idToken: string) {
+  return createSessionCookie(idToken);
 }
 
 export async function clearAdminSessionCookie(): Promise<void> {
@@ -67,25 +78,24 @@ export async function setAdminSessionCookie(sessionCookie: string): Promise<void
   });
 }
 
-export async function readAdminSession(): Promise<AuthUser | null> {
+export async function readSession(): Promise<AuthUser | null> {
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get(SESSION_COOKIE)?.value;
-  if (!sessionCookie) {
-    return null;
-  }
+  if (!sessionCookie) return null;
 
   try {
     const decoded = await getAdminAuth().verifySessionCookie(sessionCookie, true);
-    if (!isSuperAdminEmail(decoded.email)) {
-      return null;
-    }
-    return {
-      uid: decoded.uid,
-      email: decoded.email ?? "",
-    };
+    return userFromDecoded(decoded);
   } catch {
     return null;
   }
+}
+
+/** Session only if the user is a super admin. */
+export async function readAdminSession(): Promise<AuthUser | null> {
+  const user = await readSession();
+  if (!user || user.role !== "admin") return null;
+  return user;
 }
 
 export async function assertAdminRequest(
@@ -106,6 +116,29 @@ export async function assertAdminRequest(
 
   if (!isSuperAdminEmail(decoded.email)) {
     throw new AdminAuthError("No autorizado para el panel admin", 403);
+  }
+
+  return decoded;
+}
+
+export async function assertSellerOrAdminRequest(
+  _request?: NextRequest,
+): Promise<DecodedIdToken> {
+  const cookieStore = await cookies();
+  const sessionCookie = cookieStore.get(SESSION_COOKIE)?.value;
+  if (!sessionCookie) {
+    throw new AdminAuthError("Authentication required", 401);
+  }
+
+  let decoded: DecodedIdToken;
+  try {
+    decoded = await getAdminAuth().verifySessionCookie(sessionCookie, true);
+  } catch {
+    throw new AdminAuthError("Authentication required", 401);
+  }
+
+  if (!getAuthRole(decoded.email)) {
+    throw new AdminAuthError("No autorizado", 403);
   }
 
   return decoded;

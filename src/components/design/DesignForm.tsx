@@ -369,6 +369,19 @@ export function DesignForm({
         />
       </div>
 
+      <div className="space-y-1.5">
+        <label className="text-xs text-text-muted">Descripción</label>
+        <textarea
+          className={`${fieldClass} min-h-24`}
+          value={values.description}
+          onChange={(e) =>
+            onChange({ ...values, description: e.target.value })
+          }
+          placeholder="Descripción visible para el vendedor"
+          required
+        />
+      </div>
+
       <TaxonomySelect
         label="Categoría"
         field="categories"

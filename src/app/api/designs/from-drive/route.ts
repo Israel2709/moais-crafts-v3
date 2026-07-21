@@ -29,12 +29,21 @@ export async function POST(request: NextRequest) {
       suggestedPrice?: string | number | null;
       fabricationTime?: string;
       driveLocation?: string;
+      description?: string;
       notes?: string;
     };
 
     const title = body.title?.trim() ?? "";
     if (!title) {
       return Response.json({ error: "El nombre es requerido" }, { status: 400 });
+    }
+
+    const description = body.description?.trim() ?? "";
+    if (!description) {
+      return Response.json(
+        { error: "La descripción es requerida" },
+        { status: 400 },
+      );
     }
 
     const category = body.category?.trim() || "otros";
@@ -73,6 +82,7 @@ export async function POST(request: NextRequest) {
       suggestedPrice,
       fabricationTime,
       driveLocation,
+      description,
       notes,
     };
 
