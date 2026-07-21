@@ -1,68 +1,84 @@
 import { NextRequest } from "next/server";
-import {
-  AdminAuthError,
-  adminErrorResponse,
-  clearAdminSessionCookie,
-  createSessionCookie,
-  readSession,
-  setAdminSessionCookie,
-} from "@/lib/auth/session";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+function json(data: unknown, status = 200) {
+  return Response.json(data, { status });
+}
 
 export async function GET() {
   try {
+    const { readSession } = await import("@/lib/auth/session");
     const user = await readSession();
-    return Response.json({
+    return json({
       authenticated: Boolean(user),
       user,
       role: user?.role ?? null,
     });
-  } catch {
-    return Response.json({
-      authenticated: false,
-      user: null,
-      role: null,
-      error:
-        "Firebase Admin no está configurado. En Vercel agrega FIREBASE_SERVICE_ACCOUNT_JSON.",
-    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unexpected error";
+    return json(
+      {
+        authenticated: false,
+        user: null,
+        role: null,
+        error: message,
+      },
+      200,
+    );
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
+    const { createSessionCookie, setAdminSessionCookie } =
+      await import("@/lib/auth/session");
+
     const body = (await request.json()) as { idToken?: string };
     if (!body.idToken) {
-      return Response.json({ error: "idToken required" }, { status: 400 });
+      return json({ error: "idToken required" }, 400);
     }
 
     const { sessionCookie, user } = await createSessionCookie(body.idToken);
     await setAdminSessionCookie(sessionCookie);
-    return Response.json({ ok: true, user, role: user.role });
+    return json({ ok: true, user, role: user.role });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unexpected error";
     if (
       message.includes("Firebase Admin credentials missing") ||
       message.includes("FIREBASE_SERVICE_ACCOUNT")
     ) {
-      return Response.json(
+      return json(
         {
           error:
-            "Firebase Admin no está configurado en el servidor. En Vercel agrega FIREBASE_SERVICE_ACCOUNT_JSON.",
+            "Firebase Admin no está configurado en el servidor. Revisa FIREBASE_SERVICE_ACCOUNT_JSON en Vercel (Production) y redespliega.",
         },
-        { status: 500 },
+        500,
       );
     }
-    return adminErrorResponse(error);
+    try {
+      const { adminErrorResponse } = await import("@/lib/auth/session");
+      return adminErrorResponse(error);
+    } catch {
+      return json({ error: message }, 500);
+    }
   }
 }
 
 export async function DELETE() {
   try {
+    const { clearAdminSessionCookie } = await import("@/lib/auth/session");
     await clearAdminSessionCookie();
-    return Response.json({ ok: true });
+    return json({ ok: true });
   } catch (error) {
-    if (error instanceof AdminAuthError) {
+    try {
+      const { adminErrorResponse } = await import("@/lib/auth/session");
       return adminErrorResponse(error);
+    } catch {
+      const message =
+        error instanceof Error ? error.message : "Unexpected error";
+      return json({ error: message }, 500);
     }
-    return adminErrorResponse(error);
   }
 }

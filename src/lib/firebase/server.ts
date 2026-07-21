@@ -1,4 +1,4 @@
-import { readFileSync, existsSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import path from "path";
 import { initializeApp, getApps, cert, type App } from "firebase-admin/app";
 import { getAuth, type Auth } from "firebase-admin/auth";
@@ -11,26 +11,75 @@ type ServiceAccount = {
   private_key: string;
 };
 
+function normalizePrivateKey(key: string): string {
+  return key.replace(/\\n/g, "\n").replace(/\r\n/g, "\n");
+}
+
+function parseServiceAccountJson(raw: string): ServiceAccount {
+  let text = raw.trim();
+  // Vercel UI sometimes wraps the value in extra quotes.
+  if (
+    (text.startsWith('"') && text.endsWith('"')) ||
+    (text.startsWith("'") && text.endsWith("'"))
+  ) {
+    text = text.slice(1, -1);
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    // Double-encoded JSON string
+    try {
+      parsed = JSON.parse(JSON.parse(text) as string);
+    } catch {
+      throw new Error("FIREBASE_SERVICE_ACCOUNT_JSON is not valid JSON");
+    }
+  }
+
+  if (!parsed || typeof parsed !== "object") {
+    throw new Error("FIREBASE_SERVICE_ACCOUNT_JSON is not a JSON object");
+  }
+
+  const data = parsed as Record<string, unknown>;
+  const projectId = data.project_id;
+  const clientEmail = data.client_email;
+  const privateKey = data.private_key;
+
+  if (
+    typeof projectId !== "string" ||
+    typeof clientEmail !== "string" ||
+    typeof privateKey !== "string"
+  ) {
+    throw new Error(
+      "FIREBASE_SERVICE_ACCOUNT_JSON missing project_id, client_email or private_key",
+    );
+  }
+
+  return {
+    project_id: projectId,
+    client_email: clientEmail,
+    private_key: normalizePrivateKey(privateKey),
+  };
+}
+
 function loadServiceAccount(): ServiceAccount | null {
+  // Prefer env JSON on Vercel — the .data/ file is not deployed.
+  const rawJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  if (rawJson?.trim()) {
+    return parseServiceAccountJson(rawJson);
+  }
+
   const filePath =
     process.env.FIREBASE_SERVICE_ACCOUNT_PATH ||
     path.join(process.cwd(), ".data", "firebase-service-account.json");
 
   if (existsSync(filePath)) {
     const raw = readFileSync(filePath, "utf8");
-    return JSON.parse(raw) as ServiceAccount;
+    return parseServiceAccountJson(raw);
   }
 
-  const rawJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-  if (!rawJson) {
-    return null;
-  }
-
-  try {
-    return JSON.parse(rawJson) as ServiceAccount;
-  } catch {
-    throw new Error("FIREBASE_SERVICE_ACCOUNT_JSON is not valid JSON");
-  }
+  return null;
 }
 
 let adminApp: App | undefined;
@@ -49,7 +98,7 @@ export function getAdminApp(): App {
   const serviceAccount = loadServiceAccount();
   if (!serviceAccount) {
     throw new Error(
-      "Firebase Admin credentials missing. Set FIREBASE_SERVICE_ACCOUNT_PATH or place the JSON at .data/firebase-service-account.json",
+      "Firebase Admin credentials missing. Set FIREBASE_SERVICE_ACCOUNT_JSON on Vercel (or FIREBASE_SERVICE_ACCOUNT_PATH locally).",
     );
   }
 
@@ -57,7 +106,7 @@ export function getAdminApp(): App {
     credential: cert({
       projectId: serviceAccount.project_id,
       clientEmail: serviceAccount.client_email,
-      privateKey: serviceAccount.private_key.replace(/\\n/g, "\n"),
+      privateKey: serviceAccount.private_key,
     }),
     storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
   });

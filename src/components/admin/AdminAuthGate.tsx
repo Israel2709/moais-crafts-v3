@@ -36,17 +36,12 @@ function prefersRedirectSignIn() {
 }
 
 async function parseSessionResponse(res: Response): Promise<SessionResponse> {
-  const contentType = res.headers.get("content-type") ?? "";
-  if (!contentType.includes("application/json")) {
-    throw new Error(
-      "El servidor no respondió JSON. En Vercel configura FIREBASE_SERVICE_ACCOUNT_JSON y redespliega.",
-    );
-  }
+  const text = await res.text();
   try {
-    return (await res.json()) as SessionResponse;
+    return JSON.parse(text) as SessionResponse;
   } catch {
     throw new Error(
-      "Respuesta inválida del servidor al crear la sesión. Revisa las variables de entorno en Vercel.",
+      `El servidor respondió ${res.status} sin JSON. Revisa FIREBASE_SERVICE_ACCOUNT_JSON en Vercel (entorno Production) y que no exista FIREBASE_SERVICE_ACCOUNT_PATH apuntando a un archivo local.`,
     );
   }
 }
