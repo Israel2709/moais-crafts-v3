@@ -52,16 +52,20 @@ npm run dev
 | `/laser` | Fuentes Drive + exploración de archivos laser |
 | `/3d` | Fuentes Drive + exploración de archivos 3D |
 | `/amigurumis` | Fuentes Drive + exploración de amigurumis |
-| `/catalog` | Catálogo propio + filtros |
-| `/catalog/[id]` | Detalle / editar / publicar |
-| `/p/catalog` | Stub público (`published`) sin login |
+| `/catalog` | Mi catálogo (colección personal) + selección → catálogos de venta |
+| `/catalog/[id]` | Detalle / editar diseño |
+| `/sales-catalogs` | Gestión de catálogos de venta |
+| `/sales-catalogs/[id]` | Detalle / editar / quitar diseños |
+| `/p/catalog` | Catálogos publicados (vista vendedor) |
+| `/p/catalog/[slug]` | Diseños de un catálogo publicado |
+| `/p/design/[id]` | Detalle público de diseño (si está en un catálogo publicado) |
 | `/explore` | Redirige a `/laser` |
 
 ## Auth
 
 - **Admin:** Firebase Auth (Google + correo/contraseña) + session cookie httpOnly.
 - Solo emails listados en `MOAIS_SUPER_ADMIN_EMAILS` pasan el gate y las APIs admin.
-- **Público:** `/p/catalog` sin autenticación.
+- **Público / vendedor:** `/p/catalog` lista catálogos de venta publicados; un diseño solo es visible si pertenece a alguno.
 - **Drive OAuth** es independiente del login (credenciales `GOOGLE_CLIENT_*`).
 - Colección `moaisCatalog_admins` reservada para allowlist en Firestore más adelante.
 

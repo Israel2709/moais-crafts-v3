@@ -13,6 +13,7 @@ import {
   LuPanelLeftClose,
   LuPanelLeftOpen,
   LuLogOut,
+  LuUpload,
 } from "react-icons/lu";
 import { SiGoogledrive } from "react-icons/si";
 import type { IconType } from "react-icons";
@@ -24,11 +25,12 @@ const SIDEBAR_KEY = "moais-sidebar-collapsed";
 
 const links: { href: string; label: string; icon: IconType }[] = [
   { href: "/", label: "Inicio", icon: LuHouse },
+  { href: "/upload", label: "Subir diseño", icon: LuUpload },
   { href: "/laser", label: "Archivos laser", icon: LuFolderOpen },
   { href: "/3d", label: "Archivos 3D", icon: LuBox },
   { href: "/amigurumis", label: "Amigurumis", icon: LuHeart },
   { href: "/catalog", label: "Mi catálogo", icon: LuLibrary },
-  { href: "/p/catalog", label: "Vista pública", icon: LuGlobe },
+  { href: "/sales-catalogs", label: "Catálogos de venta", icon: LuGlobe },
 ];
 
 export function DesktopShell({ children }: { children: React.ReactNode }) {

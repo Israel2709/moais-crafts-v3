@@ -1,7 +1,13 @@
 import { google } from "googleapis";
 import { promises as fs } from "fs";
 import path from "path";
-import type { DriveItem } from "@/lib/types/design";
+import type { DesignFolderHit, DesignSearchProgress, DriveItem } from "@/lib/types/design";
+import {
+  isDesignDriveFile,
+  isDesignPackageFolder,
+  isImageDriveFile,
+  nameMatchesQuery,
+} from "@/lib/drive/design-files";
 
 const FOLDER_MIME = "application/vnd.google-apps.folder";
 const TOKEN_FILE = path.join(process.cwd(), ".data", "drive-token.json");
@@ -138,101 +144,134 @@ export async function listDriveChildren(folderId: string): Promise<DriveItem[]> 
   return items;
 }
 
-export async function searchDriveFiles(
+export async function crawlDesignPackageFolders(
+  roots: { folderId: string; name: string }[],
+  options?: {
+    onProgress?: (progress: DesignSearchProgress) => void | Promise<void>;
+    onPackage?: (hit: DesignFolderHit) => void | Promise<void>;
+  },
+): Promise<{ packages: DesignFolderHit[]; scannedFolders: number }> {
+  if (roots.length === 0) {
+    return { packages: [], scannedFolders: 0 };
+  }
+
+  const packages: DesignFolderHit[] = [];
+  const queue: { folderId: string; pathParts: string[] }[] = roots.map(
+    (root) => ({
+      folderId: root.folderId,
+      pathParts: [root.name],
+    }),
+  );
+  const visited = new Set<string>();
+  let scanned = 0;
+
+  async function emitProgress(currentPath: string, done = false) {
+    const queueLeft = queue.length;
+    const total = scanned + queueLeft;
+    const percent = done
+      ? 100
+      : total === 0
+        ? 0
+        : Math.min(99, Math.round((scanned / total) * 100));
+    await options?.onProgress?.({
+      scanned,
+      queueLeft,
+      hits: packages.length,
+      percent,
+      currentPath,
+    });
+  }
+
+  await emitProgress(roots.map((r) => r.name).join(", "));
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    if (visited.has(current.folderId)) continue;
+    visited.add(current.folderId);
+
+    const currentPath = current.pathParts.join(" / ");
+    const children = await listDriveChildren(current.folderId);
+    scanned += 1;
+
+    const folders = children.filter((item) => item.isFolder);
+    const files = children.filter((item) => !item.isFolder);
+    const images = files.filter(isImageDriveFile);
+    const designs = files.filter(isDesignDriveFile);
+
+    const depth = current.pathParts.length;
+    const folderName = current.pathParts[current.pathParts.length - 1] ?? "";
+    if (depth > 1 && isDesignPackageFolder(images, designs)) {
+      const hit: DesignFolderHit = {
+        id: current.folderId,
+        name: folderName,
+        path: currentPath,
+        webViewLink: `https://drive.google.com/drive/folders/${current.folderId}`,
+        previewFileIds: images.map((img) => img.id),
+        designFiles: designs.map((file) => ({
+          id: file.id,
+          name: file.name,
+          mimeType: file.mimeType,
+        })),
+      };
+      packages.push(hit);
+      await options?.onPackage?.(hit);
+    }
+
+    for (const folder of folders) {
+      queue.push({
+        folderId: folder.id,
+        pathParts: [...current.pathParts, folder.name],
+      });
+    }
+
+    await emitProgress(currentPath);
+  }
+
+  await Promise.all(
+    packages.map(async (hit) => {
+      try {
+        const meta = await getDriveFileMeta(hit.id);
+        hit.webViewLink =
+          meta.webViewLink ??
+          `https://drive.google.com/drive/folders/${hit.id}`;
+      } catch {
+        // keep fallback folder URL
+      }
+    }),
+  );
+
+  const sorted = packages.sort((a, b) => a.path.localeCompare(b.path, "es"));
+  await emitProgress(
+    sorted[sorted.length - 1]?.path ?? roots[0]?.name ?? "",
+    true,
+  );
+  return { packages: sorted, scannedFolders: scanned };
+}
+
+export async function searchDesignFolders(
   query: string,
-  options?: { rootFolderIds?: string[] },
-): Promise<DriveItem[]> {
-  const rootFolderIds = options?.rootFolderIds?.filter(Boolean) ?? [];
-  if (rootFolderIds.length === 0) {
+  roots: { folderId: string; name: string }[],
+  options?: {
+    onProgress?: (progress: DesignSearchProgress) => void | Promise<void>;
+    onHit?: (hit: DesignFolderHit) => void | Promise<void>;
+  },
+): Promise<DesignFolderHit[]> {
+  if (!query.trim() || roots.length === 0) {
     return [];
   }
 
-  const drive = await getAuthenticatedDrive();
-  const safe = query.replace(/'/g, "\\'");
-  const rootSet = new Set(rootFolderIds);
-  const candidates: DriveItem[] = [];
-  let pageToken: string | undefined;
-  let pages = 0;
+  const { packages } = await crawlDesignPackageFolders(roots, {
+    onProgress: options?.onProgress,
+    onPackage: async (hit) => {
+      if (nameMatchesQuery(hit.name, query)) {
+        await options?.onHit?.(hit);
+      }
+    },
+  });
 
-  do {
-    const res = await drive.files.list({
-      q: `name contains '${safe}' and trashed = false`,
-      pageSize: 100,
-      pageToken,
-      fields:
-        "nextPageToken,files(id,name,mimeType,modifiedTime,size,thumbnailLink,iconLink,webViewLink,parents)",
-      orderBy: "modifiedTime desc",
-      supportsAllDrives: true,
-      includeItemsFromAllDrives: true,
-    });
-
-    for (const file of res.data.files ?? []) {
-      candidates.push(mapFile(file));
-    }
-    pageToken = res.data.nextPageToken ?? undefined;
-    pages += 1;
-  } while (pageToken && pages < 5);
-
-  const parentCache = new Map<string, string[]>();
-  const matched: DriveItem[] = [];
-
-  for (const item of candidates) {
-    if (rootSet.has(item.id)) {
-      matched.push(item);
-      continue;
-    }
-    if (await isUnderAnyRoot(drive, item, rootSet, parentCache)) {
-      matched.push(item);
-    }
-  }
-
-  return matched;
+  return packages.filter((hit) => nameMatchesQuery(hit.name, query));
 }
 
-async function isUnderAnyRoot(
-  drive: Awaited<ReturnType<typeof getAuthenticatedDrive>>,
-  item: DriveItem,
-  rootIds: Set<string>,
-  parentCache: Map<string, string[]>,
-): Promise<boolean> {
-  const queue = [...item.parents];
-  const seen = new Set<string>();
-
-  while (queue.length > 0) {
-    const id = queue.shift()!;
-    if (rootIds.has(id)) {
-      return true;
-    }
-    if (seen.has(id)) {
-      continue;
-    }
-    seen.add(id);
-
-    let parents = parentCache.get(id);
-    if (!parents) {
-      try {
-        const meta = await drive.files.get({
-          fileId: id,
-          fields: "parents",
-          supportsAllDrives: true,
-        });
-        parents = meta.data.parents ?? [];
-      } catch {
-        parents = [];
-      }
-      parentCache.set(id, parents);
-    }
-
-    for (const parentId of parents) {
-      if (rootIds.has(parentId)) {
-        return true;
-      }
-      queue.push(parentId);
-    }
-  }
-
-  return false;
-}
 
 export async function getDriveFileMeta(fileId: string) {
   const drive = await getAuthenticatedDrive();

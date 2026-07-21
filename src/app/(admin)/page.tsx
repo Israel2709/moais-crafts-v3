@@ -10,8 +10,8 @@ export default function HomePage() {
         Catálogo curado de diseños
       </h2>
       <p className="mt-4 max-w-xl text-text-muted">
-        Explora carpetas de Drive por tipo, guarda lo útil en Firebase (Raziel
-        Hub) y filtra tu catálogo.
+        Explora Drive por tipo, guarda lo útil en tu catálogo personal y arma
+        los catálogos de venta que verá el vendedor.
       </p>
       <div className="mt-8 grid gap-3 sm:grid-cols-2">
         <Link
@@ -47,7 +47,16 @@ export default function HomePage() {
         >
           <p className="text-brand-cyan">Mi catálogo</p>
           <p className="mt-2 text-sm text-text-muted">
-            Solo lo que ya curaste — listo para publicar después.
+            Tu colección personal de diseños curados.
+          </p>
+        </Link>
+        <Link
+          href="/sales-catalogs"
+          className="rounded-2xl border border-border bg-bg-panel p-5 transition hover:border-brand-orange"
+        >
+          <p className="text-brand-orange">Catálogos de venta</p>
+          <p className="mt-2 text-sm text-text-muted">
+            Colecciones que verá el vendedor en su UI.
           </p>
         </Link>
       </div>

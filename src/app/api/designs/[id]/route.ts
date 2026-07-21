@@ -3,9 +3,10 @@ import {
   AdminAuthError,
   adminErrorResponse,
   assertAdminRequest,
+  readAdminSession,
 } from "@/lib/auth/session";
 import { getDesignById, updateDesign } from "@/lib/designs/service";
-import type { DesignStatus } from "@/lib/types/design";
+import { isDesignInPublishedCatalog } from "@/lib/sales-catalogs/service";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -17,8 +18,12 @@ export async function GET(request: NextRequest, { params }: Params) {
       return Response.json({ error: "Not found" }, { status: 404 });
     }
 
-    if (design.status !== "published") {
-      await assertAdminRequest(request);
+    const session = await readAdminSession();
+    if (!session) {
+      const visible = await isDesignInPublishedCatalog(id);
+      if (!visible) {
+        return Response.json({ error: "Not found" }, { status: 404 });
+      }
     }
 
     return Response.json({ design });
@@ -40,8 +45,11 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       season?: string;
       franchise?: string;
       tags?: string[];
+      factoryPrice?: number | null;
+      suggestedPrice?: number | null;
+      fabricationTime?: string;
+      driveLocation?: string;
       notes?: string;
-      status?: DesignStatus;
     };
 
     const design = await updateDesign(id, body);

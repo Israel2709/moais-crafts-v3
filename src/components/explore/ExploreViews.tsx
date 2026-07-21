@@ -1,15 +1,114 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import type { DesignKind, DriveItem, Taxonomies } from "@/lib/types/design";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { DesignForm } from "@/components/design/DesignForm";
+import { DesignFolderResultCard } from "@/components/explore/DesignFolderResultCard";
+import { SearchProgressBar } from "@/components/explore/SearchProgressBar";
+import {
+  EMPTY_DESIGN_FORM,
+  type DesignFormValues,
+} from "@/lib/designs/form";
+import { consumeDesignSearchStream } from "@/lib/drive/search-stream";
+import { DEFAULT_TAXONOMIES } from "@/lib/firebase/collections";
+import type {
+  DesignFolderHit,
+  DesignKind,
+  DesignSearchProgress,
+  DriveIndexMeta,
+  DriveItem,
+  Taxonomies,
+} from "@/lib/types/design";
 
 type Crumb = { id: string; name: string };
 
-const DEFAULT_TAXONOMIES: Taxonomies = {
-  categories: ["juguetes", "decoracion", "llaveros", "organizacion", "otros"],
-  seasons: ["todo-el-ano", "navidad", "dia-del-padre", "dia-de-la-madre", "halloween", "san-valentin"],
-  franchises: ["sin-franquicia"],
-};
+function mediaUrl(fileId: string) {
+  return `/api/drive/media?fileId=${encodeURIComponent(fileId)}`;
+}
+
+function formatIndexDate(iso: string) {
+  if (!iso) return "";
+  try {
+    return new Date(iso).toLocaleString("es-MX", {
+      dateStyle: "short",
+      timeStyle: "short",
+    });
+  } catch {
+    return iso;
+  }
+}
+
+function CatalogPanelForm({
+  state,
+  hint,
+}: {
+  state: ReturnType<typeof useExploreState>;
+  hint: string;
+}) {
+  return (
+    <div className="space-y-3">
+      <p className="break-words text-xs text-text-muted">{hint}</p>
+      <DesignForm
+        values={state.form}
+        onChange={state.setForm}
+        taxonomies={state.taxonomies}
+        onTaxonomiesChange={state.setTaxonomies}
+        previewFiles={state.previewFiles}
+        onPreviewFilesChange={state.setPreviewFiles}
+        existingPreviewUrls={state.existingPreviewUrls}
+        requireLocalPreviews={false}
+        showLocalPreviewInput={state.existingPreviewUrls.length === 0}
+        submitting={state.saving}
+        submitLabel="Agregar al catálogo"
+        onSubmit={state.addToCatalog}
+        message={state.formSuccess}
+        error={state.formError}
+        onClearFeedback={state.clearFormFeedback}
+      />
+    </div>
+  );
+}
+
+function IndexStatusBar({
+  meta,
+  indexing,
+  indexProgress,
+  onRebuild,
+}: {
+  meta: DriveIndexMeta | null;
+  indexing: boolean;
+  indexProgress: DesignSearchProgress | null;
+  onRebuild: () => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-text-muted">
+        {meta ? (
+          <span>
+            Índice: {meta.packageCount} diseño
+            {meta.packageCount === 1 ? "" : "s"} ·{" "}
+            {formatIndexDate(meta.updatedAt)}
+            {meta.stale ? (
+              <span className="text-brand-orange"> · desactualizado</span>
+            ) : null}
+          </span>
+        ) : (
+          <span>Sin índice — actualízalo una vez para buscar al instante</span>
+        )}
+        <button
+          type="button"
+          onClick={onRebuild}
+          disabled={indexing}
+          className="rounded-lg border border-border px-2.5 py-1 text-xs text-brand-cyan hover:border-brand-cyan disabled:opacity-60"
+        >
+          {indexing ? "Indexando…" : "Actualizar índice"}
+        </button>
+      </div>
+      {indexProgress ? (
+        <SearchProgressBar progress={indexProgress} label="Indexando Drive" />
+      ) : null}
+    </div>
+  );
+}
 
 function useExploreState(
   root: { id: string; name: string } | null,
@@ -17,60 +116,94 @@ function useExploreState(
 ) {
   const [crumbs, setCrumbs] = useState<Crumb[]>([]);
   const [items, setItems] = useState<DriveItem[]>([]);
+  const [searchHits, setSearchHits] = useState<DesignFolderHit[] | null>(null);
+  const [indexMeta, setIndexMeta] = useState<DriveIndexMeta | null>(null);
+  const [indexProgress, setIndexProgress] =
+    useState<DesignSearchProgress | null>(null);
+  const [indexing, setIndexing] = useState(false);
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<"all" | "folder" | "file">("all");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [taxonomies, setTaxonomies] = useState<Taxonomies>(DEFAULT_TAXONOMIES);
   const [selected, setSelected] = useState<DriveItem | null>(null);
-  const [form, setForm] = useState({
-    title: "",
-    category: "otros",
-    season: "todo-el-ano",
-    franchise: "sin-franquicia",
-  });
+  const [selectedHit, setSelectedHit] = useState<DesignFolderHit | null>(null);
+  const [form, setForm] = useState<DesignFormValues>(EMPTY_DESIGN_FORM);
+  const [previewFiles, setPreviewFiles] = useState<File[]>([]);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [formSuccess, setFormSuccess] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const requestSeq = useRef(0);
+  const indexAbort = useRef<AbortController | null>(null);
 
   const rootId = root?.id ?? null;
   const rootName = root?.name ?? "Drive";
   const currentFolderId = crumbs[crumbs.length - 1]?.id ?? rootId;
+  const isSearchMode = searchHits !== null;
+
+  const loadIndexMeta = useCallback(async () => {
+    try {
+      const res = await fetch(
+        `/api/drive/index?kind=${encodeURIComponent(kind)}`,
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error al cargar índice");
+      setIndexMeta(data.meta ?? null);
+    } catch {
+      setIndexMeta(null);
+    }
+  }, [kind]);
 
   useEffect(() => {
     if (!rootId) {
+      indexAbort.current?.abort();
       setCrumbs([]);
       setItems([]);
       setSelected(null);
+      setSelectedHit(null);
+      setSearchHits(null);
       setQuery("");
       setError(null);
       return;
     }
     setCrumbs([{ id: rootId, name: rootName }]);
     setSelected(null);
+    setSelectedHit(null);
+    setSearchHits(null);
     setQuery("");
     setMessage(null);
-  }, [rootId, rootName]);
+  }, [rootId, rootName, kind]);
+
+  useEffect(() => {
+    void loadIndexMeta();
+  }, [loadIndexMeta]);
 
   const loadFolder = useCallback(async (folderId: string) => {
+    const seq = ++requestSeq.current;
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/drive/list?folderId=${encodeURIComponent(folderId)}`);
+      const res = await fetch(
+        `/api/drive/list?folderId=${encodeURIComponent(folderId)}`,
+      );
       const data = await res.json();
+      if (seq !== requestSeq.current) return;
       if (!res.ok) throw new Error(data.error || "Error al listar Drive");
       setItems(data.items ?? []);
     } catch (err) {
+      if (seq !== requestSeq.current) return;
       setError(err instanceof Error ? err.message : "Error");
       setItems([]);
     } finally {
-      setLoading(false);
+      if (seq === requestSeq.current) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    if (!currentFolderId) return;
+    if (!currentFolderId || isSearchMode) return;
     void loadFolder(currentFolderId);
-  }, [currentFolderId, loadFolder]);
+  }, [currentFolderId, loadFolder, isSearchMode]);
 
   useEffect(() => {
     void fetch("/api/taxonomies")
@@ -81,68 +214,211 @@ function useExploreState(
       .catch(() => undefined);
   }, []);
 
+  function clearSearch() {
+    setSearchHits(null);
+    setSelectedHit(null);
+    setQuery("");
+    setMessage(null);
+    if (currentFolderId) void loadFolder(currentFolderId);
+  }
+
+  async function rebuildIndex() {
+    const seq = ++requestSeq.current;
+    indexAbort.current?.abort();
+    const abort = new AbortController();
+    indexAbort.current = abort;
+
+    setIndexing(true);
+    setError(null);
+    setMessage(null);
+    setIndexProgress({
+      scanned: 0,
+      queueLeft: 0,
+      hits: 0,
+      percent: 0,
+      currentPath: "",
+    });
+
+    try {
+      const res = await fetch(
+        `/api/drive/index?kind=${encodeURIComponent(kind)}`,
+        { method: "POST", signal: abort.signal },
+      );
+      if (seq !== requestSeq.current) return;
+
+      if (!res.ok) {
+        const data = (await res.json().catch(() => null)) as {
+          error?: string;
+        } | null;
+        throw new Error(data?.error || "No se pudo actualizar el índice");
+      }
+
+      await consumeDesignSearchStream(res, {
+        onProgress: (progress) => {
+          if (seq !== requestSeq.current) return;
+          setIndexProgress(progress);
+        },
+        onMessage: (msg) => {
+          if (seq !== requestSeq.current) return;
+          setMessage(msg);
+        },
+      });
+
+      if (seq !== requestSeq.current) return;
+      await loadIndexMeta();
+    } catch (err) {
+      if (abort.signal.aborted || seq !== requestSeq.current) return;
+      setError(err instanceof Error ? err.message : "Error");
+    } finally {
+      if (seq === requestSeq.current) {
+        setIndexing(false);
+        setIndexProgress(null);
+      }
+    }
+  }
+
   async function onSearch(event: FormEvent) {
     event.preventDefault();
-    if (!currentFolderId) return;
     if (!query.trim()) {
-      void loadFolder(currentFolderId);
+      clearSearch();
       return;
     }
+    const seq = ++requestSeq.current;
     setLoading(true);
     setError(null);
+    setSelected(null);
+    setSelectedHit(null);
+    setMessage(null);
+    setSearchHits([]);
+
     try {
       const res = await fetch(
         `/api/drive/search?q=${encodeURIComponent(query.trim())}&kind=${encodeURIComponent(kind)}`,
       );
-      const data = await res.json();
+      const data = (await res.json()) as {
+        items?: DesignFolderHit[];
+        message?: string;
+        meta?: DriveIndexMeta | null;
+        error?: string;
+      };
+      if (seq !== requestSeq.current) return;
       if (!res.ok) throw new Error(data.error || "Error en búsqueda");
-      setItems(data.items ?? []);
+      setSearchHits(data.items ?? []);
+      if (data.meta) setIndexMeta(data.meta);
+      if (data.message) setError(data.message);
     } catch (err) {
+      if (seq !== requestSeq.current) return;
       setError(err instanceof Error ? err.message : "Error");
+      setSearchHits([]);
     } finally {
-      setLoading(false);
+      if (seq === requestSeq.current) setLoading(false);
     }
   }
 
   function openFolder(item: DriveItem) {
     setQuery("");
+    setSearchHits(null);
+    setSelectedHit(null);
     setCrumbs((prev) => [...prev, { id: item.id, name: item.name }]);
   }
 
   function jumpTo(index: number) {
     setQuery("");
+    setSearchHits(null);
+    setSelectedHit(null);
     setCrumbs((prev) => prev.slice(0, index + 1));
   }
 
   function selectFile(item: DriveItem) {
+    setSelectedHit(null);
     setSelected(item);
-    setForm((f) => ({ ...f, title: item.name.replace(/\.[^.]+$/, "") }));
+    setPreviewFiles([]);
+    setForm((f) => ({
+      ...f,
+      title: item.name.replace(/\.[^.]+$/, ""),
+      driveLocation: item.webViewLink ?? item.name,
+    }));
     setMessage(null);
+    setFormSuccess(null);
+    setFormError(null);
+  }
+
+  function selectHit(hit: DesignFolderHit) {
+    setSelected(null);
+    setSelectedHit(hit);
+    setPreviewFiles([]);
+    setForm((f) => ({
+      ...f,
+      title: hit.name,
+      driveLocation: hit.webViewLink ?? hit.path,
+    }));
+    setMessage(null);
+    setFormSuccess(null);
+    setFormError(null);
   }
 
   async function addToCatalog(event: FormEvent) {
     event.preventDefault();
-    if (!selected) return;
+    if (!selected && !selectedHit) return;
     setSaving(true);
-    setMessage(null);
+    setFormSuccess(null);
+    setFormError(null);
     try {
+      const body = selectedHit
+        ? {
+            driveFolderId: selectedHit.id,
+            drivePath: selectedHit.path,
+            title: form.title,
+            category: form.category,
+            season: form.season,
+            tags: form.tags,
+            factoryPrice: form.factoryPrice,
+            suggestedPrice: form.suggestedPrice,
+            fabricationTime: form.fabricationTime,
+            driveLocation: form.driveLocation || selectedHit.path,
+            notes: form.notes,
+          }
+        : {
+            driveFileId: selected!.id,
+            title: form.title,
+            category: form.category,
+            season: form.season,
+            tags: form.tags,
+            factoryPrice: form.factoryPrice,
+            suggestedPrice: form.suggestedPrice,
+            fabricationTime: form.fabricationTime,
+            driveLocation: form.driveLocation,
+            notes: form.notes,
+          };
       const res = await fetch("/api/designs/from-drive", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          driveFileId: selected.id,
-          ...form,
-        }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "No se pudo agregar");
-      setMessage(`Agregado: ${data.design.title} (${data.design.id})`);
+      setForm({
+        ...EMPTY_DESIGN_FORM,
+        category: form.category,
+        season: form.season,
+      });
+      setPreviewFiles([]);
+      setSelected(null);
+      setSelectedHit(null);
+      setFormSuccess(`Diseño creado: ${data.design.title} (${data.design.id})`);
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Error");
+      setFormError(err instanceof Error ? err.message : "Error");
     } finally {
       setSaving(false);
     }
   }
+
+  const existingPreviewUrls = useMemo(() => {
+    if (selectedHit) {
+      return selectedHit.previewFileIds.map(mediaUrl);
+    }
+    return [];
+  }, [selectedHit]);
 
   const visible = useMemo(() => {
     return items.filter((item) => {
@@ -155,6 +431,11 @@ function useExploreState(
   return {
     crumbs,
     visible,
+    searchHits,
+    indexMeta,
+    indexProgress,
+    indexing,
+    isSearchMode,
     query,
     setQuery,
     typeFilter,
@@ -162,16 +443,30 @@ function useExploreState(
     loading,
     error,
     taxonomies,
+    setTaxonomies,
     selected,
+    selectedHit,
     form,
     setForm,
+    previewFiles,
+    setPreviewFiles,
+    existingPreviewUrls,
     saving,
     message,
+    formSuccess,
+    formError,
+    clearFormFeedback: () => {
+      setFormSuccess(null);
+      setFormError(null);
+    },
     onSearch,
+    rebuildIndex,
     openFolder,
     jumpTo,
     selectFile,
+    selectHit,
     addToCatalog,
+    clearSearch,
     reload: () => {
       if (currentFolderId) void loadFolder(currentFolderId);
     },
@@ -179,21 +474,24 @@ function useExploreState(
 }
 
 export function ExploreMobile({
-  root,
-  kind,
+  state,
 }: {
-  root: { id: string; name: string };
-  kind: DesignKind;
+  state: ReturnType<typeof useExploreState>;
 }) {
-  const state = useExploreState(root, kind);
-
   return (
     <div className="space-y-4 md:hidden">
+      <IndexStatusBar
+        meta={state.indexMeta}
+        indexing={state.indexing}
+        indexProgress={state.indexProgress}
+        onRebuild={() => void state.rebuildIndex()}
+      />
+
       <form onSubmit={state.onSearch} className="flex min-w-0 gap-2">
         <input
           value={state.query}
           onChange={(e) => state.setQuery(e.target.value)}
-          placeholder="Buscar por nombre"
+          placeholder="Buscar diseño por nombre"
           className="min-w-0 flex-1 rounded-lg border border-border bg-bg-panel px-3 py-2 text-sm"
         />
         <button type="submit" className="rounded-lg bg-brand-blue px-3 py-2 text-sm">
@@ -201,138 +499,190 @@ export function ExploreMobile({
         </button>
       </form>
 
-      <div className="flex gap-2 overflow-x-auto text-xs text-text-muted">
-        {state.crumbs.map((crumb, index) => (
-          <button
-            key={`${crumb.id}-${index}`}
-            type="button"
-            onClick={() => state.jumpTo(index)}
-            className="whitespace-nowrap text-brand-cyan"
-          >
-            {crumb.name}
-            {index < state.crumbs.length - 1 ? " /" : ""}
-          </button>
-        ))}
-      </div>
+      {!state.isSearchMode ? (
+        <>
+          <div className="flex gap-2 overflow-x-auto text-xs text-text-muted">
+            {state.crumbs.map((crumb, index) => (
+              <button
+                key={`${crumb.id}-${index}`}
+                type="button"
+                onClick={() => state.jumpTo(index)}
+                className="whitespace-nowrap text-brand-cyan"
+              >
+                {crumb.name}
+                {index < state.crumbs.length - 1 ? " /" : ""}
+              </button>
+            ))}
+          </div>
 
-      <select
-        value={state.typeFilter}
-        onChange={(e) =>
-          state.setTypeFilter(e.target.value as "all" | "folder" | "file")
-        }
-        className="w-full rounded-lg border border-border bg-bg-panel px-3 py-2 text-sm"
-      >
-        <option value="all">Todos</option>
-        <option value="folder">Carpetas</option>
-        <option value="file">Archivos</option>
-      </select>
+          <select
+            value={state.typeFilter}
+            onChange={(e) =>
+              state.setTypeFilter(e.target.value as "all" | "folder" | "file")
+            }
+            className="w-full rounded-lg border border-border bg-bg-panel px-3 py-2 text-sm"
+          >
+            <option value="all">Todos</option>
+            <option value="folder">Carpetas</option>
+            <option value="file">Archivos</option>
+          </select>
+        </>
+      ) : (
+        <p className="text-xs text-text-muted">
+          Resultados desde el índice · carpetas con muestras e archivos de
+          diseño
+        </p>
+      )}
 
       {state.loading ? <p className="text-sm text-text-muted">Cargando…</p> : null}
       {state.error ? <p className="text-sm text-brand-red">{state.error}</p> : null}
+      {state.message ? (
+        <p className="text-sm text-brand-cyan">{state.message}</p>
+      ) : null}
 
-      <ul className="divide-y divide-border rounded-2xl border border-border bg-bg-panel">
-        {state.visible.map((item) => (
-          <li key={item.id}>
-            <button
-              type="button"
-              className="flex w-full items-center gap-3 px-3 py-3 text-left"
-              onClick={() =>
-                item.isFolder ? state.openFolder(item) : state.selectFile(item)
-              }
-            >
-              <span className="flex h-8 w-8 items-center justify-center rounded bg-bg-elevated text-xs text-brand-cyan">
-                {item.isFolder ? "DIR" : "FILE"}
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm text-brand-cream">
-                  {item.name}
-                </span>
-                <span className="block truncate text-xs text-text-muted">
-                  {item.mimeType}
-                </span>
-              </span>
-            </button>
-          </li>
-        ))}
-      </ul>
-
-      {state.selected ? (
-        <form
-          onSubmit={state.addToCatalog}
-          className="space-y-3 rounded-2xl border border-brand-orange/40 bg-bg-elevated p-4"
-        >
-          <p className="text-sm text-brand-orange">Agregar a mi catálogo</p>
-          <p className="truncate text-xs text-text-muted">{state.selected.name}</p>
-          <input
-            className="w-full rounded-lg border border-border bg-bg-panel px-3 py-2 text-sm"
-            value={state.form.title}
-            onChange={(e) => state.setForm({ ...state.form, title: e.target.value })}
-            placeholder="Título"
-            required
-          />
-          <select
-            className="w-full rounded-lg border border-border bg-bg-panel px-3 py-2 text-sm"
-            value={state.form.category}
-            onChange={(e) =>
-              state.setForm({ ...state.form, category: e.target.value })
-            }
-          >
-            {state.taxonomies.categories.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-          <select
-            className="w-full rounded-lg border border-border bg-bg-panel px-3 py-2 text-sm"
-            value={state.form.season}
-            onChange={(e) =>
-              state.setForm({ ...state.form, season: e.target.value })
-            }
-          >
-            {state.taxonomies.seasons.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-          <select
-            className="w-full rounded-lg border border-border bg-bg-panel px-3 py-2 text-sm"
-            value={state.form.franchise}
-            onChange={(e) =>
-              state.setForm({ ...state.form, franchise: e.target.value })
-            }
-          >
-            {state.taxonomies.franchises.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-          <button
-            type="submit"
-            disabled={state.saving}
-            className="w-full rounded-lg bg-brand-red py-2 text-sm font-medium disabled:opacity-60"
-          >
-            {state.saving ? "Subiendo…" : "Agregar"}
-          </button>
-          {state.message ? (
-            <p className="text-xs text-brand-cyan">{state.message}</p>
+      {state.isSearchMode ? (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {(state.searchHits ?? []).map((hit) => (
+            <DesignFolderResultCard
+              key={hit.id}
+              hit={hit}
+              selected={state.selectedHit?.id === hit.id}
+              onAdd={() => state.selectHit(hit)}
+            />
+          ))}
+          {!state.loading && (state.searchHits?.length ?? 0) === 0 ? (
+            <p className="text-sm text-text-muted">Sin coincidencias.</p>
           ) : null}
-        </form>
+        </div>
+      ) : (
+        <ul className="divide-y divide-border rounded-2xl border border-border bg-bg-panel">
+          {state.visible.map((item) => (
+            <li key={item.id}>
+              <button
+                type="button"
+                className="flex w-full items-center gap-3 px-3 py-3 text-left"
+                onClick={() =>
+                  item.isFolder ? state.openFolder(item) : state.selectFile(item)
+                }
+              >
+                <span className="flex h-8 w-8 items-center justify-center rounded bg-bg-elevated text-xs text-brand-cyan">
+                  {item.isFolder ? "DIR" : "FILE"}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm text-brand-cream">
+                    {item.name}
+                  </span>
+                  <span className="block truncate text-xs text-text-muted">
+                    {item.mimeType}
+                  </span>
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {state.selected || state.selectedHit ? (
+        <div className="rounded-2xl border border-brand-orange/40 bg-bg-elevated p-4">
+          <p className="mb-3 text-sm text-brand-orange">Agregar a mi catálogo</p>
+          <CatalogPanelForm
+            state={state}
+            hint={state.selectedHit?.path ?? state.selected?.name ?? ""}
+          />
+        </div>
       ) : null}
     </div>
   );
 }
 
 export function ExploreDesktop({
-  root,
-  kind,
+  state,
 }: {
-  root: { id: string; name: string };
-  kind: DesignKind;
+  state: ReturnType<typeof useExploreState>;
 }) {
-  const state = useExploreState(root, kind);
+  if (state.isSearchMode) {
+    return (
+      <div className="hidden h-full min-h-0 min-w-0 flex-1 md:grid md:grid-cols-1 md:grid-rows-[minmax(0,1fr)] md:gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,300px)]">
+        <section className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-border bg-bg-panel p-4">
+          <div className="mb-3 shrink-0">
+            <IndexStatusBar
+              meta={state.indexMeta}
+              indexing={state.indexing}
+              indexProgress={state.indexProgress}
+              onRebuild={() => void state.rebuildIndex()}
+            />
+          </div>
+          <form
+            onSubmit={state.onSearch}
+            className="mb-4 flex shrink-0 min-w-0 flex-wrap gap-2"
+          >
+            <input
+              value={state.query}
+              onChange={(e) => state.setQuery(e.target.value)}
+              placeholder="Buscar diseño por nombre"
+              className="min-w-0 flex-1 rounded-lg border border-border bg-bg-elevated px-3 py-2 text-sm"
+            />
+            <button
+              type="submit"
+              className="rounded-lg bg-brand-blue px-4 py-2 text-sm"
+            >
+              Buscar
+            </button>
+            <button
+              type="button"
+              onClick={() => state.clearSearch()}
+              className="rounded-lg border border-border px-4 py-2 text-sm text-text-muted hover:text-brand-cream"
+            >
+              Limpiar
+            </button>
+          </form>
+          <p className="mb-3 shrink-0 text-xs text-text-muted">
+            Búsqueda sobre el índice local
+            {state.searchHits
+              ? ` · ${state.searchHits.length} resultado${state.searchHits.length === 1 ? "" : "s"}`
+              : ""}
+          </p>
+          {state.loading ? (
+            <p className="shrink-0 text-sm text-text-muted">Buscando…</p>
+          ) : null}
+          {state.error ? (
+            <p className="shrink-0 text-sm text-brand-red">{state.error}</p>
+          ) : null}
+          {state.message ? (
+            <p className="shrink-0 text-sm text-brand-cyan">{state.message}</p>
+          ) : null}
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-4">
+              {(state.searchHits ?? []).map((hit) => (
+                <DesignFolderResultCard
+                  key={hit.id}
+                  hit={hit}
+                  selected={state.selectedHit?.id === hit.id}
+                  onAdd={() => state.selectHit(hit)}
+                />
+              ))}
+            </div>
+            {!state.loading && (state.searchHits?.length ?? 0) === 0 ? (
+              <p className="mt-4 text-sm text-text-muted">Sin coincidencias.</p>
+            ) : null}
+          </div>
+        </section>
+
+        <section className="flex min-h-0 min-w-0 flex-col overflow-y-auto rounded-2xl border border-border bg-bg-panel p-4">
+          <p className="mb-3 shrink-0 text-sm text-brand-orange">
+            Agregar a mi catálogo
+          </p>
+          {state.selectedHit ? (
+            <CatalogPanelForm state={state} hint={state.selectedHit.path} />
+          ) : (
+            <p className="text-sm text-text-muted">
+              Elige «Agregar al catálogo» en una card.
+            </p>
+          )}
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="hidden h-full min-h-0 min-w-0 flex-1 md:grid md:grid-cols-1 md:grid-rows-[minmax(0,1fr)] md:gap-4 xl:grid-cols-[minmax(0,240px)_minmax(0,1fr)_minmax(0,300px)]">
@@ -370,6 +720,14 @@ export function ExploreDesktop({
       </section>
 
       <section className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-border bg-bg-panel p-4">
+        <div className="mb-3 shrink-0">
+          <IndexStatusBar
+            meta={state.indexMeta}
+            indexing={state.indexing}
+            indexProgress={state.indexProgress}
+            onRebuild={() => void state.rebuildIndex()}
+          />
+        </div>
         <form
           onSubmit={state.onSearch}
           className="mb-4 flex shrink-0 min-w-0 flex-wrap gap-2"
@@ -377,7 +735,7 @@ export function ExploreDesktop({
           <input
             value={state.query}
             onChange={(e) => state.setQuery(e.target.value)}
-            placeholder="Buscar por nombre"
+            placeholder="Buscar diseño por nombre"
             className="min-w-0 flex-1 rounded-lg border border-border bg-bg-elevated px-3 py-2 text-sm"
           />
           <select
@@ -400,6 +758,9 @@ export function ExploreDesktop({
         ) : null}
         {state.error ? (
           <p className="shrink-0 text-sm text-brand-red">{state.error}</p>
+        ) : null}
+        {state.message ? (
+          <p className="shrink-0 text-sm text-brand-cyan">{state.message}</p>
         ) : null}
         <div className="min-h-0 flex-1 overflow-y-auto">
           <div className="grid grid-cols-2 gap-3 xl:grid-cols-3">
@@ -431,64 +792,7 @@ export function ExploreDesktop({
       <section className="flex min-h-0 min-w-0 flex-col overflow-y-auto rounded-2xl border border-border bg-bg-panel p-4">
         <p className="mb-3 shrink-0 text-sm text-brand-orange">Agregar a mi catálogo</p>
         {state.selected ? (
-          <form onSubmit={state.addToCatalog} className="space-y-3">
-            <p className="truncate text-xs text-text-muted">{state.selected.name}</p>
-            <input
-              className="w-full rounded-lg border border-border bg-bg-elevated px-3 py-2 text-sm"
-              value={state.form.title}
-              onChange={(e) => state.setForm({ ...state.form, title: e.target.value })}
-              required
-            />
-            <select
-              className="w-full rounded-lg border border-border bg-bg-elevated px-3 py-2 text-sm"
-              value={state.form.category}
-              onChange={(e) =>
-                state.setForm({ ...state.form, category: e.target.value })
-              }
-            >
-              {state.taxonomies.categories.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-            <select
-              className="w-full rounded-lg border border-border bg-bg-elevated px-3 py-2 text-sm"
-              value={state.form.season}
-              onChange={(e) =>
-                state.setForm({ ...state.form, season: e.target.value })
-              }
-            >
-              {state.taxonomies.seasons.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-            <select
-              className="w-full rounded-lg border border-border bg-bg-elevated px-3 py-2 text-sm"
-              value={state.form.franchise}
-              onChange={(e) =>
-                state.setForm({ ...state.form, franchise: e.target.value })
-              }
-            >
-              {state.taxonomies.franchises.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-            <button
-              type="submit"
-              disabled={state.saving}
-              className="w-full rounded-lg bg-brand-red py-2 text-sm font-medium"
-            >
-              {state.saving ? "Subiendo…" : "Agregar"}
-            </button>
-            {state.message ? (
-              <p className="break-words text-xs text-brand-cyan">{state.message}</p>
-            ) : null}
-          </form>
+          <CatalogPanelForm state={state} hint={state.selected.name} />
         ) : (
           <p className="text-sm text-text-muted">
             Selecciona un archivo del panel central.
@@ -496,5 +800,21 @@ export function ExploreDesktop({
         )}
       </section>
     </div>
+  );
+}
+
+export function ExplorePanel({
+  root,
+  kind,
+}: {
+  root: { id: string; name: string };
+  kind: DesignKind;
+}) {
+  const state = useExploreState(root, kind);
+  return (
+    <>
+      <ExploreMobile state={state} />
+      <ExploreDesktop state={state} />
+    </>
   );
 }

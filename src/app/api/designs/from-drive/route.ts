@@ -4,31 +4,97 @@ import {
   adminErrorResponse,
   assertAdminRequest,
 } from "@/lib/auth/session";
-import { createDesignFromDrive } from "@/lib/designs/service";
+import {
+  normalizeTags,
+  parseOptionalPrice,
+} from "@/lib/designs/form";
+import {
+  createDesignFromDrive,
+  createDesignFromDriveFolder,
+} from "@/lib/designs/service";
 
 export async function POST(request: NextRequest) {
   try {
     await assertAdminRequest(request);
     const body = (await request.json()) as {
       driveFileId?: string;
+      driveFolderId?: string;
+      drivePath?: string;
       title?: string;
       category?: string;
       season?: string;
       franchise?: string;
+      tags?: string[];
+      factoryPrice?: string | number | null;
+      suggestedPrice?: string | number | null;
+      fabricationTime?: string;
+      driveLocation?: string;
       notes?: string;
     };
 
+    const title = body.title?.trim() ?? "";
+    if (!title) {
+      return Response.json({ error: "El nombre es requerido" }, { status: 400 });
+    }
+
+    const category = body.category?.trim() || "otros";
+    const season = body.season?.trim() || "todo-el-ano";
+    const franchise = body.franchise ?? "sin-franquicia";
+    const tags = normalizeTags(body.tags ?? []);
+    const fabricationTime = body.fabricationTime?.trim() ?? "";
+    const driveLocation = body.driveLocation?.trim() || body.drivePath?.trim() || "";
+    const notes = body.notes;
+
+    let factoryPrice: number | null = null;
+    let suggestedPrice: number | null = null;
+    try {
+      factoryPrice =
+        typeof body.factoryPrice === "number"
+          ? body.factoryPrice
+          : parseOptionalPrice(String(body.factoryPrice ?? ""));
+      suggestedPrice =
+        typeof body.suggestedPrice === "number"
+          ? body.suggestedPrice
+          : parseOptionalPrice(String(body.suggestedPrice ?? ""));
+    } catch (err) {
+      return Response.json(
+        { error: err instanceof Error ? err.message : "Precio inválido" },
+        { status: 400 },
+      );
+    }
+
+    const commerce = {
+      title,
+      category,
+      season,
+      franchise,
+      tags,
+      factoryPrice,
+      suggestedPrice,
+      fabricationTime,
+      driveLocation,
+      notes,
+    };
+
+    if (body.driveFolderId) {
+      const design = await createDesignFromDriveFolder({
+        driveFolderId: body.driveFolderId,
+        drivePath: body.drivePath,
+        ...commerce,
+      });
+      return Response.json({ design }, { status: 201 });
+    }
+
     if (!body.driveFileId) {
-      return Response.json({ error: "driveFileId is required" }, { status: 400 });
+      return Response.json(
+        { error: "driveFileId or driveFolderId is required" },
+        { status: 400 },
+      );
     }
 
     const design = await createDesignFromDrive({
       driveFileId: body.driveFileId,
-      title: body.title ?? "",
-      category: body.category ?? "otros",
-      season: body.season ?? "todo-el-ano",
-      franchise: body.franchise ?? "sin-franquicia",
-      notes: body.notes,
+      ...commerce,
     });
 
     return Response.json({ design }, { status: 201 });

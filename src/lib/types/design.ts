@@ -1,5 +1,3 @@
-export type DesignStatus = "draft" | "published";
-
 /** Catalog content kind — laser, 3D, amigurumis. */
 export type DesignKind = "laser" | "3d" | "amigurumis";
 
@@ -28,21 +26,31 @@ export type Design = {
   season: string;
   franchise: string;
   tags: string[];
+  factoryPrice: number | null;
+  suggestedPrice: number | null;
+  fabricationTime: string;
+  driveLocation: string;
   previewUrls: string[];
   fileUrls: string[];
   previewPaths: string[];
   filePaths: string[];
-  status: DesignStatus;
   source: DriveSource | null;
   notes: string;
   createdAt: string;
   updatedAt: string;
 };
 
+export type TaxonomyTerm = {
+  slug: string;
+  label: string;
+};
+
 export type Taxonomies = {
-  categories: string[];
-  seasons: string[];
-  franchises: string[];
+  categories: TaxonomyTerm[];
+  seasons: TaxonomyTerm[];
+  franchises: TaxonomyTerm[];
+  /** Catalog of reusable design tags (normalized lowercase). */
+  tags: string[];
 };
 
 export type DriveItem = {
@@ -56,4 +64,41 @@ export type DriveItem = {
   webViewLink: string | null;
   isFolder: boolean;
   parents: string[];
+};
+
+/** Folder that matches a search and contains preview images + design files. */
+export type DesignFolderHit = {
+  id: string;
+  name: string;
+  path: string;
+  webViewLink: string | null;
+  previewFileIds: string[];
+  designFiles: { id: string; name: string; mimeType: string }[];
+};
+
+/** Estimated BFS search progress: percent ≈ scanned / (scanned + queueLeft). */
+export type DesignSearchProgress = {
+  scanned: number;
+  queueLeft: number;
+  hits: number;
+  percent: number;
+  currentPath: string;
+};
+
+export type DesignSearchStreamEvent =
+  | { type: "progress"; progress: DesignSearchProgress }
+  | { type: "hit"; item: DesignFolderHit }
+  | { type: "done"; items: DesignFolderHit[] }
+  | { type: "message"; message: string }
+  | { type: "error"; error: string };
+
+/** Snapshot of design-package folders crawled from Drive for a kind. */
+export type DriveIndexMeta = {
+  kind: DesignKind;
+  updatedAt: string;
+  scannedFolders: number;
+  packageCount: number;
+  sourceFolderIds: string[];
+  sourceNames: string[];
+  stale?: boolean;
 };

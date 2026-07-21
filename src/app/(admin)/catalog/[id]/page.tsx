@@ -45,7 +45,6 @@ export default function CatalogDetailPage() {
         season: design.season,
         franchise: design.franchise,
         notes: design.notes,
-        status: design.status,
       }),
     });
     const data = await res.json();
@@ -92,7 +91,7 @@ export default function CatalogDetailPage() {
           onClick={() => router.push("/catalog")}
           className="text-sm text-brand-cyan"
         >
-          ← Volver
+          ← Volver a mi catálogo
         </button>
         <input
           className={field}
@@ -104,9 +103,11 @@ export default function CatalogDetailPage() {
           value={design.category}
           onChange={(e) => setDesign({ ...design, category: e.target.value })}
         >
-          {(taxonomies?.categories ?? [design.category]).map((c) => (
-            <option key={c} value={c}>
-              {c}
+          {(taxonomies?.categories ?? [
+            { slug: design.category, label: design.category },
+          ]).map((c) => (
+            <option key={c.slug} value={c.slug}>
+              {c.label}
             </option>
           ))}
         </select>
@@ -115,9 +116,11 @@ export default function CatalogDetailPage() {
           value={design.season}
           onChange={(e) => setDesign({ ...design, season: e.target.value })}
         >
-          {(taxonomies?.seasons ?? [design.season]).map((c) => (
-            <option key={c} value={c}>
-              {c}
+          {(taxonomies?.seasons ?? [
+            { slug: design.season, label: design.season },
+          ]).map((c) => (
+            <option key={c.slug} value={c.slug}>
+              {c.label}
             </option>
           ))}
         </select>
@@ -126,24 +129,15 @@ export default function CatalogDetailPage() {
           value={design.franchise}
           onChange={(e) => setDesign({ ...design, franchise: e.target.value })}
         >
-          {(taxonomies?.franchises ?? [design.franchise]).map((c) => (
-            <option key={c} value={c}>
-              {c}
+          {(
+            taxonomies?.franchises ?? [
+              { slug: design.franchise, label: design.franchise },
+            ]
+          ).map((c) => (
+            <option key={c.slug} value={c.slug}>
+              {c.label}
             </option>
           ))}
-        </select>
-        <select
-          className={field}
-          value={design.status}
-          onChange={(e) =>
-            setDesign({
-              ...design,
-              status: e.target.value as Design["status"],
-            })
-          }
-        >
-          <option value="draft">draft</option>
-          <option value="published">published</option>
         </select>
         <textarea
           className={`${field} min-h-24`}
@@ -170,18 +164,18 @@ export default function CatalogDetailPage() {
               rel="noreferrer"
               className="rounded-lg border border-border px-3 py-2 text-sm text-text-muted"
             >
-              Abrir en Drive
+              Ver en Drive
             </a>
           ) : null}
         </div>
+        {message ? <p className="text-sm text-brand-cyan">{message}</p> : null}
         <button
           type="submit"
           disabled={saving}
-          className="rounded-lg bg-brand-red px-4 py-2 text-sm font-medium disabled:opacity-60"
+          className="rounded-lg border border-brand-cyan/50 bg-brand-cyan/15 px-4 py-2 text-sm text-brand-cyan disabled:opacity-50"
         >
           {saving ? "Guardando…" : "Guardar"}
         </button>
-        {message ? <p className="text-sm text-brand-cyan">{message}</p> : null}
       </form>
     </div>
   );

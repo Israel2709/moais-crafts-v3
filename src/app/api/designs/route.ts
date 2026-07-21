@@ -5,21 +5,12 @@ import {
   assertAdminRequest,
 } from "@/lib/auth/session";
 import { ensureTaxonomies, listDesigns } from "@/lib/designs/service";
-import type { DesignStatus } from "@/lib/types/design";
 
 export async function GET(request: NextRequest) {
   try {
-    const statusParam = request.nextUrl.searchParams.get("status");
-    const publishedOnly = statusParam === "published";
-
-    if (!publishedOnly) {
-      await assertAdminRequest(request);
-    }
-
+    await assertAdminRequest(request);
     await ensureTaxonomies();
-    const designs = await listDesigns(
-      publishedOnly ? { status: "published" satisfies DesignStatus } : undefined,
-    );
+    const designs = await listDesigns();
     return Response.json({ designs });
   } catch (error) {
     if (error instanceof AdminAuthError) {

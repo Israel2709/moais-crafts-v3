@@ -1,7 +1,6 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
-import { searchDriveFiles } from "@/lib/drive/client";
-import { listDriveLibrarySources } from "@/lib/drive/sources";
+import { searchFromDriveIndex } from "@/lib/drive/index-service";
 import { DESIGN_KINDS } from "@/lib/drive/kind-labels";
 import {
   AdminAuthError,
@@ -16,22 +15,18 @@ export async function GET(request: NextRequest) {
     await assertAdminRequest(request);
     const q = request.nextUrl.searchParams.get("q")?.trim() ?? "";
     if (!q) {
-      return Response.json({ items: [] });
+      return Response.json({ items: [], fromIndex: true });
     }
 
     const kind = kindSchema.parse(request.nextUrl.searchParams.get("kind"));
-    const sources = await listDriveLibrarySources(kind);
-    const rootFolderIds = sources.map((source) => source.folderId);
+    const result = await searchFromDriveIndex(kind, q);
 
-    if (rootFolderIds.length === 0) {
-      return Response.json({
-        items: [],
-        message: "No hay carpetas fuente registradas para esta sección.",
-      });
-    }
-
-    const items = await searchDriveFiles(q, { rootFolderIds });
-    return Response.json({ items });
+    return Response.json({
+      items: result.items,
+      fromIndex: true,
+      meta: result.meta,
+      message: result.message,
+    });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return Response.json(

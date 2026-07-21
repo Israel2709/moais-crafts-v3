@@ -4,11 +4,10 @@ import {
   adminErrorResponse,
   assertAdminRequest,
 } from "@/lib/auth/session";
-import { ensureTaxonomies } from "@/lib/designs/service";
+import { addTaxonomyValue, ensureTaxonomies } from "@/lib/designs/service";
 
 export async function GET(request: NextRequest) {
   try {
-    // Taxonomies are readable for catalog filters; seed requires admin if missing admin SDK
     try {
       const taxonomies = await ensureTaxonomies();
       return Response.json({ taxonomies });
@@ -17,6 +16,38 @@ export async function GET(request: NextRequest) {
       const taxonomies = await ensureTaxonomies();
       return Response.json({ taxonomies });
     }
+  } catch (error) {
+    if (error instanceof AdminAuthError) {
+      return adminErrorResponse(error);
+    }
+    return adminErrorResponse(error);
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    await assertAdminRequest(request);
+    const body = (await request.json()) as {
+      field?: "categories" | "seasons" | "tags";
+      value?: string;
+    };
+
+    if (
+      body.field !== "categories" &&
+      body.field !== "seasons" &&
+      body.field !== "tags"
+    ) {
+      return Response.json(
+        { error: "field must be categories, seasons or tags" },
+        { status: 400 },
+      );
+    }
+    if (!body.value?.trim()) {
+      return Response.json({ error: "value is required" }, { status: 400 });
+    }
+
+    const result = await addTaxonomyValue(body.field, body.value);
+    return Response.json(result);
   } catch (error) {
     if (error instanceof AdminAuthError) {
       return adminErrorResponse(error);

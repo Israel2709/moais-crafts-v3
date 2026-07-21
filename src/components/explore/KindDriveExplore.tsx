@@ -2,7 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { LuChevronUp, LuFolders } from "react-icons/lu";
-import { ExploreDesktop, ExploreMobile } from "@/components/explore/ExploreViews";
+import { ExplorePanel } from "@/components/explore/ExploreViews";
 import { KIND_DESCRIPTIONS, KIND_LABELS } from "@/lib/drive/kind-labels";
 import type { DesignKind, DriveLibrarySource } from "@/lib/types/design";
 
@@ -241,8 +241,11 @@ export function KindDriveExplore({ kind }: { kind: DesignKind }) {
 
       {root ? (
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <ExploreMobile root={root} kind={kind} />
-          <ExploreDesktop root={root} kind={kind} />
+          <ExplorePanel
+            key={`${kind}-${sources.map((s) => s.folderId).sort().join("|")}`}
+            root={root}
+            kind={kind}
+          />
         </div>
       ) : !loading ? (
         <p className="text-sm text-text-muted">
