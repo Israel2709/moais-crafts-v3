@@ -4,11 +4,15 @@ import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   GoogleAuthProvider,
+  browserLocalPersistence,
   getRedirectResult,
+  onAuthStateChanged,
+  setPersistence,
   signInWithEmailAndPassword,
   signInWithPopup,
   signInWithRedirect,
   signOut,
+  type User,
 } from "firebase/auth";
 import { getClientAuth } from "@/lib/firebase/client";
 import type { AuthRole } from "@/lib/auth/index";
@@ -19,6 +23,11 @@ type SessionResponse = {
   error?: string;
   user?: { email?: string; role?: AuthRole };
 };
+
+const GOOGLE_REDIRECT_KEY = "moais.googleRedirect";
+
+/** Survives React Strict Mode double-mount; getRedirectResult is one-shot. */
+let redirectResultPromise: Promise<User | null> | null = null;
 
 function prefersRedirectSignIn() {
   if (typeof window === "undefined") return false;
@@ -60,6 +69,22 @@ async function createSession(idToken: string): Promise<AuthRole> {
   return role;
 }
 
+function consumeRedirectUser(allowCurrentUser: boolean): Promise<User | null> {
+  if (!redirectResultPromise) {
+    redirectResultPromise = (async () => {
+      const auth = getClientAuth();
+      await setPersistence(auth, browserLocalPersistence);
+      const result = await getRedirectResult(auth);
+      if (result?.user) return result.user;
+      return allowCurrentUser ? auth.currentUser : null;
+    })().catch((err) => {
+      redirectResultPromise = null;
+      throw err;
+    });
+  }
+  return redirectResultPromise;
+}
+
 function authErrorMessage(error: unknown): string {
   if (!(error instanceof Error)) {
     return "Error de autenticación";
@@ -78,7 +103,28 @@ function authErrorMessage(error: unknown): string {
   if (code === "auth/popup-blocked") {
     return "El navegador bloqueó la ventana de Google. Intenta de nuevo.";
   }
+  if (code === "auth/unauthorized-domain") {
+    return "Este dominio no está autorizado en Firebase Authentication.";
+  }
   return error.message;
+}
+
+function waitForAuthUser(timeoutMs = 4000): Promise<User | null> {
+  const auth = getClientAuth();
+  if (auth.currentUser) return Promise.resolve(auth.currentUser);
+
+  return new Promise((resolve) => {
+    const timer = window.setTimeout(() => {
+      unsub();
+      resolve(auth.currentUser);
+    }, timeoutMs);
+    const unsub = onAuthStateChanged(auth, (user) => {
+      if (!user) return;
+      window.clearTimeout(timer);
+      unsub();
+      resolve(user);
+    });
+  });
 }
 
 export function AdminAuthGate({ children }: { children: React.ReactNode }) {
@@ -93,22 +139,60 @@ export function AdminAuthGate({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let cancelled = false;
 
+    async function finishWithRole(role: AuthRole) {
+      if (cancelled) return;
+      if (role === "seller") {
+        router.replace("/p/catalog");
+        return;
+      }
+      setAuthenticated(true);
+      setReady(true);
+    }
+
     async function bootstrap() {
+      const pendingRedirect =
+        typeof window !== "undefined" &&
+        sessionStorage.getItem(GOOGLE_REDIRECT_KEY) === "1";
+
       try {
-        const redirect = await getRedirectResult(getClientAuth());
-        if (redirect?.user) {
-          const idToken = await redirect.user.getIdToken();
+        const redirectUser = await consumeRedirectUser(pendingRedirect);
+        const user =
+          redirectUser ??
+          (pendingRedirect ? await waitForAuthUser() : null);
+
+        if (user && pendingRedirect) {
+          sessionStorage.removeItem(GOOGLE_REDIRECT_KEY);
+          const idToken = await user.getIdToken(/* forceRefresh */ true);
           const role = await createSession(idToken);
+          await finishWithRole(role);
+          return;
+        }
+
+        if (!pendingRedirect) {
+          const res = await fetch("/api/auth/session");
+          const data = await parseSessionResponse(res);
           if (cancelled) return;
-          if (role === "seller") {
+          if (data.authenticated && data.role === "seller") {
             router.replace("/p/catalog");
             return;
           }
-          setAuthenticated(true);
-          setReady(true);
-          return;
+          if (data.authenticated && data.role === "admin") {
+            setAuthenticated(true);
+            setReady(true);
+            return;
+          }
+        }
+
+        if (pendingRedirect && !user) {
+          sessionStorage.removeItem(GOOGLE_REDIRECT_KEY);
+          if (!cancelled) {
+            setError(
+              "No se pudo completar el login con Google. Confirma el dominio en Firebase Authorized domains y que FIREBASE_SERVICE_ACCOUNT_JSON y MOAIS_SELLER_EMAILS estén en Vercel.",
+            );
+          }
         }
       } catch (err) {
+        sessionStorage.removeItem(GOOGLE_REDIRECT_KEY);
         if (!cancelled) setError(authErrorMessage(err));
       }
 
@@ -147,8 +231,10 @@ export function AdminAuthGate({ children }: { children: React.ReactNode }) {
     setLoading(true);
     setError(null);
     try {
+      const auth = getClientAuth();
+      await setPersistence(auth, browserLocalPersistence);
       const credential = await signInWithEmailAndPassword(
-        getClientAuth(),
+        auth,
         email.trim(),
         password,
       );
@@ -169,8 +255,13 @@ export function AdminAuthGate({ children }: { children: React.ReactNode }) {
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: "select_account" });
       const auth = getClientAuth();
+      await setPersistence(auth, browserLocalPersistence);
+
+      // Reset one-shot redirect consumer for a fresh attempt.
+      redirectResultPromise = null;
 
       if (prefersRedirectSignIn()) {
+        sessionStorage.setItem(GOOGLE_REDIRECT_KEY, "1");
         await signInWithRedirect(auth, provider);
         return;
       }
@@ -189,8 +280,10 @@ export function AdminAuthGate({ children }: { children: React.ReactNode }) {
             : "";
         if (
           code === "auth/popup-blocked" ||
-          code === "auth/operation-not-supported-in-this-environment"
+          code === "auth/operation-not-supported-in-this-environment" ||
+          code === "auth/popup-closed-by-user"
         ) {
+          sessionStorage.setItem(GOOGLE_REDIRECT_KEY, "1");
           await signInWithRedirect(auth, provider);
           return;
         }
@@ -229,8 +322,14 @@ export function AdminAuthGate({ children }: { children: React.ReactNode }) {
             disabled={loading}
             className="mt-5 w-full rounded-lg border border-brand-cyan/50 bg-bg-panel px-4 py-2.5 text-sm font-medium text-brand-cream transition hover:border-brand-cyan disabled:opacity-60"
           >
-            Continuar con Google
+            {loading ? "Conectando…" : "Continuar con Google"}
           </button>
+
+          {error ? (
+            <p className="mt-3 rounded-lg border border-brand-red/40 bg-brand-red/10 px-3 py-2 text-sm text-brand-red">
+              {error}
+            </p>
+          ) : null}
 
           <div className="my-5 flex items-center gap-3 text-xs text-text-muted">
             <span className="h-px flex-1 bg-border" />
@@ -257,7 +356,6 @@ export function AdminAuthGate({ children }: { children: React.ReactNode }) {
               autoComplete="current-password"
               required
             />
-            {error ? <p className="text-sm text-brand-red">{error}</p> : null}
             <button
               type="submit"
               disabled={loading}
