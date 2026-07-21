@@ -4,8 +4,10 @@ import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   GoogleAuthProvider,
+  getRedirectResult,
   signInWithEmailAndPassword,
   signInWithPopup,
+  signInWithRedirect,
   signOut,
 } from "firebase/auth";
 import { getClientAuth } from "@/lib/firebase/client";
@@ -18,13 +20,35 @@ type SessionResponse = {
   user?: { email?: string; role?: AuthRole };
 };
 
+function prefersRedirectSignIn() {
+  if (typeof window === "undefined") return false;
+  const ua = window.navigator.userAgent;
+  return /Android|iPhone|iPad|iPod|Mobile/i.test(ua);
+}
+
+async function parseSessionResponse(res: Response): Promise<SessionResponse> {
+  const contentType = res.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(
+      "El servidor no respondió JSON. En Vercel configura FIREBASE_SERVICE_ACCOUNT_JSON y redespliega.",
+    );
+  }
+  try {
+    return (await res.json()) as SessionResponse;
+  } catch {
+    throw new Error(
+      "Respuesta inválida del servidor al crear la sesión. Revisa las variables de entorno en Vercel.",
+    );
+  }
+}
+
 async function createSession(idToken: string): Promise<AuthRole> {
   const res = await fetch("/api/auth/session", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ idToken }),
   });
-  const data = (await res.json()) as SessionResponse;
+  const data = await parseSessionResponse(res);
   if (!res.ok) {
     await signOut(getClientAuth()).catch(() => undefined);
     throw new Error(data.error || "No se pudo crear la sesión");
@@ -51,6 +75,9 @@ function authErrorMessage(error: unknown): string {
   if (code === "auth/popup-closed-by-user") {
     return "Inicio de sesión cancelado";
   }
+  if (code === "auth/popup-blocked") {
+    return "El navegador bloqueó la ventana de Google. Intenta de nuevo.";
+  }
   return error.message;
 }
 
@@ -64,17 +91,47 @@ export function AdminAuthGate({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    void fetch("/api/auth/session")
-      .then((res) => res.json())
-      .then((data: SessionResponse) => {
+    let cancelled = false;
+
+    async function bootstrap() {
+      try {
+        const redirect = await getRedirectResult(getClientAuth());
+        if (redirect?.user) {
+          const idToken = await redirect.user.getIdToken();
+          const role = await createSession(idToken);
+          if (cancelled) return;
+          if (role === "seller") {
+            router.replace("/p/catalog");
+            return;
+          }
+          setAuthenticated(true);
+          setReady(true);
+          return;
+        }
+      } catch (err) {
+        if (!cancelled) setError(authErrorMessage(err));
+      }
+
+      try {
+        const res = await fetch("/api/auth/session");
+        const data = await parseSessionResponse(res);
+        if (cancelled) return;
         if (data.authenticated && data.role === "seller") {
           router.replace("/p/catalog");
           return;
         }
         setAuthenticated(Boolean(data.authenticated && data.role === "admin"));
-        setReady(true);
-      })
-      .catch(() => setReady(true));
+      } catch {
+        // keep login form
+      } finally {
+        if (!cancelled) setReady(true);
+      }
+    }
+
+    void bootstrap();
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
 
   async function finishLogin(role: AuthRole) {
@@ -111,10 +168,34 @@ export function AdminAuthGate({ children }: { children: React.ReactNode }) {
     try {
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: "select_account" });
-      const credential = await signInWithPopup(getClientAuth(), provider);
-      const idToken = await credential.user.getIdToken();
-      const role = await createSession(idToken);
-      await finishLogin(role);
+      const auth = getClientAuth();
+
+      if (prefersRedirectSignIn()) {
+        await signInWithRedirect(auth, provider);
+        return;
+      }
+
+      try {
+        const credential = await signInWithPopup(auth, provider);
+        const idToken = await credential.user.getIdToken();
+        const role = await createSession(idToken);
+        await finishLogin(role);
+      } catch (popupErr) {
+        const code =
+          popupErr instanceof Error &&
+          "code" in popupErr &&
+          typeof popupErr.code === "string"
+            ? popupErr.code
+            : "";
+        if (
+          code === "auth/popup-blocked" ||
+          code === "auth/operation-not-supported-in-this-environment"
+        ) {
+          await signInWithRedirect(auth, provider);
+          return;
+        }
+        throw popupErr;
+      }
     } catch (err) {
       setError(authErrorMessage(err));
     } finally {

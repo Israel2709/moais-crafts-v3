@@ -44,7 +44,18 @@ npm install
 npm run dev
 ```
 
-5. Abre `http://localhost:3040`, inicia sesión con Google o correo (solo emails en `MOAIS_SUPER_ADMIN_EMAILS`), luego **Conectar Google Drive** desde Explorar (guarda refresh token en `.data/drive-token.json`).
+5. Abre `http://localhost:3040`, inicia sesión con Google o correo (solo emails en `MOAIS_SUPER_ADMIN_EMAILS` o `MOAIS_SELLER_EMAILS`), luego **Conectar Google Drive** desde Explorar (guarda refresh token en `.data/drive-token.json`).
+
+### Deploy en Vercel
+
+El archivo `.data/firebase-service-account.json` **no** se sube. En Vercel → Project → Settings → Environment Variables agrega al menos:
+
+- todas las `NEXT_PUBLIC_FIREBASE_*`
+- `FIREBASE_SERVICE_ACCOUNT_JSON` = contenido completo del JSON de service account (una sola línea)
+- `MOAIS_SUPER_ADMIN_EMAILS`
+- `MOAIS_SELLER_EMAILS`
+
+Sin `FIREBASE_SERVICE_ACCOUNT_JSON`, el login falla porque `/api/auth/session` no puede verificar el token.
 
 ## Rutas
 
