@@ -104,7 +104,7 @@ function authErrorMessage(error: unknown): string {
   return error.message;
 }
 
-function waitForAuthUser(timeoutMs = 4000): Promise<User | null> {
+function waitForAuthUser(timeoutMs = 8000): Promise<User | null> {
   const auth = getClientAuth();
   if (auth.currentUser) return Promise.resolve(auth.currentUser);
 
@@ -181,8 +181,10 @@ export function AdminAuthGate({ children }: { children: React.ReactNode }) {
         if (pendingRedirect && !user) {
           sessionStorage.removeItem(GOOGLE_REDIRECT_KEY);
           if (!cancelled) {
+            const host =
+              typeof window !== "undefined" ? window.location.hostname : "";
             setError(
-              "No se pudo completar el login con Google. Confirma el dominio en Firebase Authorized domains y que FIREBASE_SERVICE_ACCOUNT_JSON y MOAIS_SELLER_EMAILS estén en Vercel.",
+              `No se pudo completar el login con Google. En Firebase Console → Authentication → Settings → Authorized domains agrega "${host}" (y limpia datos del sitio / reabre Safari si el redirect se quedó a medias).`,
             );
           }
         }
