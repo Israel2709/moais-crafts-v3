@@ -4,10 +4,8 @@ import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   GoogleAuthProvider,
-  browserLocalPersistence,
   getRedirectResult,
   onAuthStateChanged,
-  setPersistence,
   signInWithEmailAndPassword,
   signInWithPopup,
   signInWithRedirect,
@@ -24,15 +22,32 @@ type SessionResponse = {
   user?: { email?: string; role?: AuthRole };
 };
 
+/** localStorage survives iOS Safari leaving for Google better than sessionStorage. */
 const GOOGLE_REDIRECT_KEY = "moais.googleRedirect";
 
 /** Survives React Strict Mode double-mount; getRedirectResult is one-shot. */
 let redirectResultPromise: Promise<User | null> | null = null;
 
-function prefersRedirectSignIn() {
+function readPendingGoogleRedirect(): boolean {
   if (typeof window === "undefined") return false;
-  const ua = window.navigator.userAgent;
-  return /Android|iPhone|iPad|iPod|Mobile/i.test(ua);
+  try {
+    return window.localStorage.getItem(GOOGLE_REDIRECT_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function setPendingGoogleRedirect(pending: boolean) {
+  if (typeof window === "undefined") return;
+  try {
+    if (pending) {
+      window.localStorage.setItem(GOOGLE_REDIRECT_KEY, "1");
+    } else {
+      window.localStorage.removeItem(GOOGLE_REDIRECT_KEY);
+    }
+  } catch {
+    // Private mode may block storage; redirect recovery is best-effort.
+  }
 }
 
 async function parseSessionResponse(res: Response): Promise<SessionResponse> {
@@ -68,7 +83,6 @@ function consumeRedirectUser(allowCurrentUser: boolean): Promise<User | null> {
   if (!redirectResultPromise) {
     redirectResultPromise = (async () => {
       const auth = getClientAuth();
-      await setPersistence(auth, browserLocalPersistence);
       const result = await getRedirectResult(auth);
       if (result?.user) return result.user;
       return allowCurrentUser ? auth.currentUser : null;
@@ -92,7 +106,7 @@ function authErrorMessage(error: unknown): string {
   if (code === "auth/user-not-found") {
     return "Usuario no encontrado";
   }
-  if (code === "auth/popup-closed-by-user") {
+  if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request") {
     return "Inicio de sesión cancelado";
   }
   if (code === "auth/popup-blocked") {
@@ -122,6 +136,15 @@ function waitForAuthUser(timeoutMs = 8000): Promise<User | null> {
   });
 }
 
+function shouldFallbackToRedirect(error: unknown): boolean {
+  if (!(error instanceof Error) || !("code" in error)) return false;
+  const code = typeof error.code === "string" ? error.code : "";
+  return (
+    code === "auth/popup-blocked" ||
+    code === "auth/operation-not-supported-in-this-environment"
+  );
+}
+
 export function AdminAuthGate({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [ready, setReady] = useState(false);
@@ -145,9 +168,7 @@ export function AdminAuthGate({ children }: { children: React.ReactNode }) {
     }
 
     async function bootstrap() {
-      const pendingRedirect =
-        typeof window !== "undefined" &&
-        sessionStorage.getItem(GOOGLE_REDIRECT_KEY) === "1";
+      const pendingRedirect = readPendingGoogleRedirect();
 
       try {
         const redirectUser = await consumeRedirectUser(pendingRedirect);
@@ -156,7 +177,7 @@ export function AdminAuthGate({ children }: { children: React.ReactNode }) {
           (pendingRedirect ? await waitForAuthUser() : null);
 
         if (user && pendingRedirect) {
-          sessionStorage.removeItem(GOOGLE_REDIRECT_KEY);
+          setPendingGoogleRedirect(false);
           const idToken = await user.getIdToken(/* forceRefresh */ true);
           const role = await createSession(idToken);
           await finishWithRole(role);
@@ -179,17 +200,17 @@ export function AdminAuthGate({ children }: { children: React.ReactNode }) {
         }
 
         if (pendingRedirect && !user) {
-          sessionStorage.removeItem(GOOGLE_REDIRECT_KEY);
+          setPendingGoogleRedirect(false);
           if (!cancelled) {
             const host =
               typeof window !== "undefined" ? window.location.hostname : "";
             setError(
-              `No se pudo completar el login con Google. En Firebase Console → Authentication → Settings → Authorized domains agrega "${host}" (y limpia datos del sitio / reabre Safari si el redirect se quedó a medias).`,
+              `No se pudo completar el login con Google en este navegador. Prueba Chrome (no in-app), confirma que "${host}" esté en Firebase Authorized domains, o usa correo/contraseña.`,
             );
           }
         }
       } catch (err) {
-        sessionStorage.removeItem(GOOGLE_REDIRECT_KEY);
+        setPendingGoogleRedirect(false);
         if (!cancelled) setError(authErrorMessage(err));
       }
 
@@ -229,7 +250,6 @@ export function AdminAuthGate({ children }: { children: React.ReactNode }) {
     setError(null);
     try {
       const auth = getClientAuth();
-      await setPersistence(auth, browserLocalPersistence);
       const credential = await signInWithEmailAndPassword(
         auth,
         email.trim(),
@@ -252,41 +272,29 @@ export function AdminAuthGate({ children }: { children: React.ReactNode }) {
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: "select_account" });
       const auth = getClientAuth();
-      await setPersistence(auth, browserLocalPersistence);
 
       // Reset one-shot redirect consumer for a fresh attempt.
       redirectResultPromise = null;
 
-      if (prefersRedirectSignIn()) {
-        sessionStorage.setItem(GOOGLE_REDIRECT_KEY, "1");
-        await signInWithRedirect(auth, provider);
-        return;
-      }
-
+      // Prefer popup on mobile too — redirect often loses auth state on iOS/Android
+      // after returning from accounts.google.com.
       try {
         const credential = await signInWithPopup(auth, provider);
+        setPendingGoogleRedirect(false);
         const idToken = await credential.user.getIdToken();
         const role = await createSession(idToken);
         await finishLogin(role);
+        return;
       } catch (popupErr) {
-        const code =
-          popupErr instanceof Error &&
-          "code" in popupErr &&
-          typeof popupErr.code === "string"
-            ? popupErr.code
-            : "";
-        if (
-          code === "auth/popup-blocked" ||
-          code === "auth/operation-not-supported-in-this-environment" ||
-          code === "auth/popup-closed-by-user"
-        ) {
-          sessionStorage.setItem(GOOGLE_REDIRECT_KEY, "1");
-          await signInWithRedirect(auth, provider);
-          return;
+        if (!shouldFallbackToRedirect(popupErr)) {
+          throw popupErr;
         }
-        throw popupErr;
       }
+
+      setPendingGoogleRedirect(true);
+      await signInWithRedirect(auth, provider);
     } catch (err) {
+      setPendingGoogleRedirect(false);
       setError(authErrorMessage(err));
     } finally {
       setLoading(false);
