@@ -13,6 +13,7 @@ import {
   type User,
 } from "firebase/auth";
 import { getClientAuth } from "@/lib/firebase/client";
+import { BrandLogo } from "@/components/brand/BrandLogo";
 import type { AuthRole } from "@/lib/auth/index";
 
 type SessionResponse = {
@@ -311,32 +312,35 @@ export function AdminAuthGate({ children }: { children: React.ReactNode }) {
 
   if (!authenticated) {
     return (
-      <div className="flex min-h-dvh items-center justify-center px-4">
-        <div className="w-full max-w-md rounded-2xl border border-border bg-bg-elevated p-6 shadow-xl">
-          <p className="font-[family-name:var(--font-display)] text-lg text-brand-cyan">
+      <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center px-4 py-10">
+        <div className="mb-8 flex flex-col items-center text-center">
+          <BrandLogo size="hero" priority />
+          <p className="mt-4 font-[family-name:var(--font-display)] text-2xl font-bold tracking-tight text-brand-cyan">
             Moai&apos;s Crafts
           </p>
           <p className="mt-2 text-sm text-text-muted">
             Entra con Google o correo. Admins van al panel; vendedores a los
             catálogos de venta.
           </p>
+        </div>
 
+        <div className="space-y-3 rounded-2xl border border-border bg-bg-elevated/90 p-5 shadow-sm">
           <button
             type="button"
             onClick={() => void onGoogleSignIn()}
             disabled={loading}
-            className="mt-5 w-full rounded-lg border border-brand-cyan/50 bg-bg-panel px-4 py-2.5 text-sm font-medium text-brand-cream transition hover:border-brand-cyan disabled:opacity-60"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-bg-panel px-4 py-2.5 text-sm font-semibold text-brand-cream transition hover:border-brand-cyan active:scale-[0.98] disabled:opacity-60"
           >
             {loading ? "Conectando…" : "Continuar con Google"}
           </button>
 
           {error ? (
-            <p className="mt-3 rounded-lg border border-brand-red/40 bg-brand-red/10 px-3 py-2 text-sm text-brand-red">
+            <p className="rounded-xl border border-brand-red/40 bg-brand-red/10 px-3 py-2 text-sm text-brand-red">
               {error}
             </p>
           ) : null}
 
-          <div className="my-5 flex items-center gap-3 text-xs text-text-muted">
+          <div className="flex items-center gap-3 text-xs text-text-muted">
             <span className="h-px flex-1 bg-border" />
             o con correo
             <span className="h-px flex-1 bg-border" />
@@ -347,7 +351,7 @@ export function AdminAuthGate({ children }: { children: React.ReactNode }) {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-lg border border-border bg-bg-panel px-3 py-2 text-brand-cream outline-none focus:border-brand-cyan"
+              className="w-full rounded-xl border border-border bg-bg-panel px-3 py-2.5 text-brand-cream outline-none transition focus:border-brand-cyan"
               placeholder="Correo"
               autoComplete="email"
               required
@@ -356,7 +360,7 @@ export function AdminAuthGate({ children }: { children: React.ReactNode }) {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-lg border border-border bg-bg-panel px-3 py-2 text-brand-cream outline-none focus:border-brand-cyan"
+              className="w-full rounded-xl border border-border bg-bg-panel px-3 py-2.5 text-brand-cream outline-none transition focus:border-brand-cyan"
               placeholder="Contraseña"
               autoComplete="current-password"
               required
@@ -364,7 +368,7 @@ export function AdminAuthGate({ children }: { children: React.ReactNode }) {
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-lg bg-brand-red px-4 py-2 font-medium text-brand-cream disabled:opacity-60"
+              className="inline-flex w-full items-center justify-center rounded-xl bg-brand-red px-4 py-2.5 text-sm font-semibold text-brand-cream shadow-sm shadow-brand-red/30 transition active:scale-[0.98] disabled:opacity-60"
             >
               {loading ? "Entrando…" : "Entrar"}
             </button>

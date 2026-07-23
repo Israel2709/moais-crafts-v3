@@ -100,7 +100,7 @@ export function InstallAppPrompt() {
   }
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-50 flex justify-center p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+    <div className="pointer-events-none fixed inset-x-0 bottom-20 z-50 flex justify-center p-3 md:bottom-0 md:pb-[max(0.75rem,env(safe-area-inset-bottom))]">
       <div className="pointer-events-auto flex w-full max-w-md items-start gap-3 rounded-2xl border border-border bg-bg-elevated/95 p-3 shadow-xl backdrop-blur-md">
         <div className="mt-0.5 rounded-lg bg-brand-cyan/15 p-2 text-brand-cyan">
           {iosHint ? (

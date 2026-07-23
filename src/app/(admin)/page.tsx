@@ -1,64 +1,118 @@
 import Link from "next/link";
+import {
+  LuBox,
+  LuFolderOpen,
+  LuGlobe,
+  LuHeart,
+  LuLibrary,
+  LuUpload,
+} from "react-icons/lu";
+
+const actions = [
+  {
+    href: "/upload",
+    label: "Subir diseño",
+    hint: "Agrega un diseño nuevo al catálogo.",
+    icon: LuUpload,
+    tone: "bg-brand-red text-brand-cream shadow-brand-red/30",
+    primary: true,
+  },
+  {
+    href: "/laser",
+    label: "Archivos laser",
+    hint: "Explora carpetas de Drive para corte láser.",
+    icon: LuFolderOpen,
+    tone: "border border-border bg-bg-panel hover:border-brand-cyan",
+    primary: false,
+  },
+  {
+    href: "/3d",
+    label: "Archivos 3D",
+    hint: "STL y otros archivos 3D desde Drive.",
+    icon: LuBox,
+    tone: "border border-border bg-bg-panel hover:border-brand-orange",
+    primary: false,
+  },
+  {
+    href: "/amigurumis",
+    label: "Amigurumis",
+    hint: "Patrones y archivos de amigurumis.",
+    icon: LuHeart,
+    tone: "border border-border bg-bg-panel hover:border-brand-cream",
+    primary: false,
+  },
+  {
+    href: "/catalog",
+    label: "Mi catálogo",
+    hint: "Tu colección personal de diseños curados.",
+    icon: LuLibrary,
+    tone: "border border-border bg-bg-panel hover:border-brand-cyan",
+    primary: false,
+  },
+  {
+    href: "/sales-catalogs",
+    label: "Catálogos de venta",
+    hint: "Colecciones publicadas para el vendedor.",
+    icon: LuGlobe,
+    tone: "border border-border bg-bg-panel hover:border-brand-orange",
+    primary: false,
+  },
+] as const;
 
 export default function HomePage() {
   return (
-    <div className="mx-auto max-w-3xl">
-      <p className="text-sm uppercase tracking-[0.2em] text-brand-orange">
-        Moai&apos;s Crafts
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-orange">
+        Inicio
       </p>
-      <h2 className="mt-3 font-[family-name:var(--font-display)] text-3xl text-brand-cream md:text-4xl">
-        Catálogo curado de diseños
+      <h2 className="mt-2 font-[family-name:var(--font-display)] text-3xl font-bold tracking-tight text-brand-cream">
+        ¿Qué quieres hacer?
       </h2>
-      <p className="mt-4 max-w-xl text-text-muted">
-        Explora Drive por tipo, guarda lo útil en tu catálogo personal y arma
-        los catálogos de venta que verá el vendedor.
+      <p className="mt-2 text-sm text-text-muted">
+        Explora Drive, cura tu catálogo y arma los packs de venta.
       </p>
-      <div className="mt-8 grid gap-3 sm:grid-cols-2">
-        <Link
-          href="/laser"
-          className="rounded-2xl border border-border bg-bg-panel p-5 transition hover:border-brand-cyan"
-        >
-          <p className="text-brand-cyan">Archivos laser</p>
-          <p className="mt-2 text-sm text-text-muted">
-            Carpetas de Drive con diseños para corte láser. Varias fuentes.
-          </p>
-        </Link>
-        <Link
-          href="/3d"
-          className="rounded-2xl border border-border bg-bg-panel p-5 transition hover:border-brand-orange"
-        >
-          <p className="text-brand-orange">Archivos 3D</p>
-          <p className="mt-2 text-sm text-text-muted">
-            Carpetas de Drive con STL y otros archivos 3D. Varias fuentes.
-          </p>
-        </Link>
-        <Link
-          href="/amigurumis"
-          className="rounded-2xl border border-border bg-bg-panel p-5 transition hover:border-brand-cream"
-        >
-          <p className="text-brand-cream">Amigurumis</p>
-          <p className="mt-2 text-sm text-text-muted">
-            Carpetas de Drive con patrones y archivos de amigurumis.
-          </p>
-        </Link>
-        <Link
-          href="/catalog"
-          className="rounded-2xl border border-border bg-bg-panel p-5 transition hover:border-brand-cyan"
-        >
-          <p className="text-brand-cyan">Mi catálogo</p>
-          <p className="mt-2 text-sm text-text-muted">
-            Tu colección personal de diseños curados.
-          </p>
-        </Link>
-        <Link
-          href="/sales-catalogs"
-          className="rounded-2xl border border-border bg-bg-panel p-5 transition hover:border-brand-orange"
-        >
-          <p className="text-brand-orange">Catálogos de venta</p>
-          <p className="mt-2 text-sm text-text-muted">
-            Colecciones que verá el vendedor en su UI.
-          </p>
-        </Link>
+
+      <div className="mt-6 grid gap-3">
+        {actions.map((action) => {
+          const Icon = action.icon;
+          return (
+            <Link
+              key={action.href}
+              href={action.href}
+              className={`flex items-start gap-3 rounded-2xl p-4 transition active:scale-[0.99] ${
+                action.primary
+                  ? `${action.tone} shadow-lg`
+                  : action.tone
+              }`}
+            >
+              <span
+                className={`mt-0.5 grid h-10 w-10 shrink-0 place-items-center rounded-xl ${
+                  action.primary
+                    ? "bg-black/15"
+                    : "bg-bg-elevated text-brand-cyan"
+                }`}
+              >
+                <Icon className="h-5 w-5" aria-hidden />
+              </span>
+              <span className="min-w-0">
+                <span
+                  className={`block text-sm font-semibold ${
+                    action.primary ? "" : "text-brand-cream"
+                  }`}
+                >
+                  {action.label}
+                </span>
+                <span
+                  className={`mt-1 block text-xs leading-relaxed ${
+                    action.primary ? "text-brand-cream/85" : "text-text-muted"
+                  }`}
+                >
+                  {action.hint}
+                </span>
+              </span>
+            </Link>
+          );
+        })}
       </div>
     </div>
   );

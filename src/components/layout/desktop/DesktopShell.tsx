@@ -18,6 +18,7 @@ import {
 import { SiGoogledrive } from "react-icons/si";
 import type { IconType } from "react-icons";
 import { signOut } from "firebase/auth";
+import { BrandLogo } from "@/components/brand/BrandLogo";
 import { getClientAuth } from "@/lib/firebase/client";
 import { kindFromPathname, KIND_ROUTES } from "@/lib/drive/kind-labels";
 
@@ -78,15 +79,15 @@ export function DesktopShell({ children }: { children: React.ReactNode }) {
         <div className="mb-8 w-full">
           {collapsed ? (
             <div className="flex flex-col items-center gap-2">
-              <p className="font-[family-name:var(--font-display)] text-sm font-semibold text-brand-cyan">
-                MC
-              </p>
+              <Link href="/" aria-label="Inicio Moai's Crafts">
+                <BrandLogo size="sm" />
+              </Link>
               <button
                 type="button"
                 onClick={toggleCollapsed}
                 title="Expandir panel"
                 aria-label="Expandir panel"
-                className="rounded-lg p-1.5 text-text-muted transition hover:bg-bg-panel hover:text-brand-cream"
+                className="rounded-xl p-1.5 text-text-muted transition hover:bg-bg-panel hover:text-brand-cream"
               >
                 <LuPanelLeftOpen className="h-4 w-4" aria-hidden />
               </button>
@@ -94,20 +95,20 @@ export function DesktopShell({ children }: { children: React.ReactNode }) {
           ) : (
             <>
               <div className="flex items-start justify-between gap-2">
-                <p className="min-w-0 font-[family-name:var(--font-display)] text-lg font-semibold text-brand-cyan">
-                  Moai&apos;s Catalog
-                </p>
+                <Link href="/" className="min-w-0" aria-label="Inicio Moai's Crafts">
+                  <BrandLogo size="md" />
+                </Link>
                 <button
                   type="button"
                   onClick={toggleCollapsed}
                   title="Colapsar panel"
                   aria-label="Colapsar panel"
-                  className="shrink-0 rounded-lg p-1.5 text-text-muted transition hover:bg-bg-panel hover:text-brand-cream"
+                  className="shrink-0 rounded-xl p-1.5 text-text-muted transition hover:bg-bg-panel hover:text-brand-cream"
                 >
                   <LuPanelLeftClose className="h-4 w-4" aria-hidden />
                 </button>
               </div>
-              <p className="mt-1 text-sm text-text-muted">Raziel Hub · laser cut</p>
+              <p className="mt-2 text-sm text-text-muted">Panel admin · laser cut</p>
             </>
           )}
         </div>
@@ -124,11 +125,11 @@ export function DesktopShell({ children }: { children: React.ReactNode }) {
                 key={link.href}
                 href={link.href}
                 title={link.label}
-                className={`flex items-center gap-3 rounded-lg text-sm transition ${
-                  collapsed ? "justify-center px-2 py-2.5" : "px-3 py-2"
+                className={`flex items-center gap-3 rounded-xl text-sm font-medium transition active:scale-[0.98] ${
+                  collapsed ? "justify-center px-2 py-2.5" : "px-3 py-2.5"
                 } ${
                   active
-                    ? "bg-brand-blue/40 text-brand-cream"
+                    ? "bg-brand-cyan text-bg shadow-sm shadow-brand-cyan/20"
                     : "text-text-muted hover:bg-bg-panel hover:text-brand-cream"
                 }`}
               >

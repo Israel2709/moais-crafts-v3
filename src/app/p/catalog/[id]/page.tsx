@@ -52,12 +52,15 @@ export default function PublicSalesCatalogPage() {
   }
 
   return (
-    <div className="min-h-dvh px-4 py-8 md:px-10">
-      <Link href="/p/catalog" className="text-sm text-brand-cyan">
+    <div className="mx-auto min-h-dvh w-full max-w-lg px-4 py-6 md:max-w-6xl md:px-10 md:py-8">
+      <Link
+        href="/p/catalog"
+        className="inline-flex rounded-xl px-1 py-1 text-sm font-medium text-brand-cyan"
+      >
         ← Catálogos
       </Link>
-      <header className="mb-8 mt-4">
-        <h1 className="font-[family-name:var(--font-display)] text-3xl text-brand-cyan">
+      <header className="mb-6 mt-3">
+        <h1 className="font-[family-name:var(--font-display)] text-3xl font-bold tracking-tight text-brand-cyan">
           {catalog.name}
         </h1>
         {catalog.description ? (

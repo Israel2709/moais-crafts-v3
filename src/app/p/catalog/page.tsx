@@ -62,12 +62,12 @@ export default function PublicCatalogPage() {
   const hiddenCatalogs = catalogs.filter((c) => hiddenIds.has(c.id));
 
   return (
-    <div className="min-h-dvh px-4 py-8 md:px-10">
-      <header className="mb-8">
-        <p className="text-sm uppercase tracking-[0.2em] text-brand-orange">
-          Moai&apos;s Crafts
+    <div className="mx-auto min-h-dvh w-full max-w-lg px-4 py-6 md:max-w-6xl md:px-10 md:py-8">
+      <header className="mb-6">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-orange">
+          Vendedor
         </p>
-        <h1 className="mt-2 font-[family-name:var(--font-display)] text-3xl text-brand-cyan">
+        <h1 className="mt-2 font-[family-name:var(--font-display)] text-3xl font-bold tracking-tight text-brand-cyan">
           Catálogos de venta
         </h1>
       </header>
