@@ -5,8 +5,9 @@ import withPWAInit from "@ducanh2912/next-pwa";
 const withPWA = withPWAInit({
   dest: "public",
   disable: process.env.NODE_ENV === "development",
-  // Avoid caching the start URL / nav HTML — it breaks Firebase Google redirect
-  // return on mobile (getRedirectResult comes back empty).
+  // Same spirit as Gastly's VitePWA registerType: "autoUpdate"
+  register: true,
+  // Avoid caching HTML navigation — it breaks Firebase Google redirect return.
   cacheStartUrl: false,
   dynamicStartUrl: true,
   cacheOnFrontEndNav: false,
@@ -14,6 +15,8 @@ const withPWA = withPWAInit({
   reloadOnOnline: true,
   workboxOptions: {
     skipWaiting: true,
+    clientsClaim: true,
+    cleanupOutdatedCaches: true,
     navigateFallbackDenylist: [/^\/api\//, /^\/__\//],
   },
 });

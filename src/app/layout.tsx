@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Outfit, Sora } from "next/font/google";
+import { InstallAppPrompt } from "@/components/pwa/InstallAppPrompt";
 import "./globals.css";
 
 const outfit = Outfit({
@@ -13,18 +14,21 @@ const sora = Sora({
 });
 
 export const metadata: Metadata = {
-  title: "Moai's Catalog",
+  title: "Moai's Crafts",
   description: "Catálogo de diseños laser cut — Moai's Crafts",
-  applicationName: "Moai's Catalog",
+  applicationName: "Moai's Crafts",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Moai's Catalog",
+    title: "Moai's Crafts",
   },
   icons: {
-    icon: [{ url: "/icons/icon-192.png", sizes: "192x192" }],
-    apple: [{ url: "/icons/icon-192.png" }],
+    icon: [
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/icons/icon-192.png", sizes: "192x192" }],
   },
 };
 
@@ -40,10 +44,17 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="es"
+      lang="es-MX"
       className={`${outfit.variable} ${sora.variable} h-full antialiased`}
     >
-      <body className="min-h-full">{children}</body>
+      <head>
+        {/* iOS still honors the apple-prefixed tag for standalone home-screen apps. */}
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+      </head>
+      <body className="min-h-full">
+        {children}
+        <InstallAppPrompt />
+      </body>
     </html>
   );
 }
